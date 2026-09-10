@@ -1,0 +1,268 @@
+/* DO NOT CHANGE */
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+
+/* DO NOT CHANGE */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* WebGuard brand accents — adapt per theme (dark: bright, light: deep) */
+  --color-wg-cyan: var(--wg-cyan);
+  --color-wg-emerald: var(--wg-emerald);
+  --color-wg-rose: var(--wg-rose);
+  --color-wg-amber: var(--wg-amber);
+  --color-wg-sky: var(--wg-sky);
+  --color-wg-orange: var(--wg-orange);
+  --color-wg-violet: var(--wg-violet);
+}
+
+/* CHANGE VALUES FOR THEME */
+:root {
+  color-scheme: light;
+  --radius: 0.625rem;
+  --background: oklch(0.975 0.005 240);
+  --foreground: oklch(0.235 0.025 255);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.235 0.025 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.235 0.025 255);
+  --primary: oklch(0.56 0.16 225);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.945 0.012 245);
+  --secondary-foreground: oklch(0.235 0.025 255);
+  --muted: oklch(0.94 0.01 245);
+  --muted-foreground: oklch(0.49 0.028 252);
+  --accent: oklch(0.925 0.02 230);
+  --accent-foreground: oklch(0.235 0.025 255);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.895 0.012 245);
+  --input: oklch(0.885 0.012 245);
+  --ring: oklch(0.56 0.16 225);
+  --chart-1: oklch(0.56 0.16 225);
+  --chart-2: oklch(0.6 0.13 160);
+  --chart-3: oklch(0.6 0.16 330);
+  --chart-4: oklch(0.78 0.15 80);
+  --chart-5: oklch(0.62 0.19 265);
+  --sidebar: oklch(0.975 0.005 240);
+  --sidebar-foreground: oklch(0.235 0.025 255);
+  --sidebar-primary: oklch(0.56 0.16 225);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.925 0.02 230);
+  --sidebar-accent-foreground: oklch(0.235 0.025 255);
+  --sidebar-border: oklch(0.895 0.012 245);
+  --sidebar-ring: oklch(0.56 0.16 225);
+
+  /* WebGuard accents (light: deep + readable) */
+  --wg-cyan: #0e7490;
+  --wg-emerald: #047857;
+  --wg-rose: #be123c;
+  --wg-amber: #b45309;
+  --wg-sky: #0369a1;
+  --wg-orange: #c2410c;
+  --wg-violet: #6d28d9;
+}
+
+.dark {
+  color-scheme: dark;
+  /*
+   * WebGuard signature dark — layered deep green-black.
+   * Elevation ladder: background < card < popover, with green-tinted
+   * borders that stay visible without glowing. Accents are bright cyan,
+   * emerald and rose that read clearly against the dark surfaces.
+   */
+  --background: #060b09;
+  --foreground: #e9f3ed;
+  --card: #0c1310;
+  --card-foreground: #e9f3ed;
+  --popover: #111a16;
+  --popover-foreground: #e9f3ed;
+  --primary: #2dd4ee;
+  --primary-foreground: #05131b;
+  --secondary: #0f1713;
+  --secondary-foreground: #d5e8de;
+  --muted: #0d1512;
+  --muted-foreground: #a0b8ad;
+  --accent: #131e19;
+  --accent-foreground: #e9f3ed;
+  --destructive: #fb5a72;
+  --border: rgba(146, 223, 194, 0.15);
+  --input: rgba(146, 223, 194, 0.18);
+  --ring: rgba(45, 212, 238, 0.5);
+  --chart-1: #2dd4ee;
+  --chart-2: #34d399;
+  --chart-3: #f472b6;
+  --chart-4: #fbbf24;
+  --chart-5: #a78bfa;
+  --sidebar: #0c1310;
+  --sidebar-foreground: #e9f3ed;
+  --sidebar-primary: #2dd4ee;
+  --sidebar-primary-foreground: #05131b;
+  --sidebar-accent: #131e19;
+  --sidebar-accent-foreground: #e9f3ed;
+  --sidebar-border: rgba(146, 223, 194, 0.15);
+  --sidebar-ring: rgba(45, 212, 238, 0.5);
+
+  /* WebGuard accents (dark: bright + glowing) */
+  --wg-cyan: #67e8f9;
+  --wg-emerald: #6ee7b7;
+  --wg-rose: #fda4af;
+  --wg-amber: #fcd34d;
+  --wg-sky: #7dd3fc;
+  --wg-orange: #fdba74;
+  --wg-violet: #c4b5fd;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not([disabled]),
+  [role="button"]:not([disabled]) {
+    cursor: pointer;
+  }
+}
+
+/* ==========================================================================
+   WebGuard SOC theme utilities
+   ========================================================================== */
+@layer components {
+  .wg-panel {
+    @apply rounded-2xl border border-border/70 bg-card/80 shadow-[0_10px_40px_-14px_rgba(1,6,18,0.35)];
+  }
+  /* Dark-mode panel definition: a hairline top highlight lifts each
+     surface off the background so cards never look flat or muddy. */
+  .dark .wg-panel {
+    border-color: rgba(146, 223, 194, 0.16);
+    box-shadow:
+      inset 0 1px 0 rgba(214, 251, 233, 0.05),
+      0 14px 44px -18px rgba(0, 0, 0, 0.6);
+  }
+  .wg-kicker {
+    @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
+  }
+  .wg-mono {
+    @apply font-mono text-[12.5px] leading-relaxed;
+  }
+  .wg-grid-bg {
+    background-image:
+      linear-gradient(rgba(34, 211, 238, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34, 211, 238, 0.055) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+  .dark .wg-grid-bg {
+    background-image:
+      linear-gradient(rgba(103, 232, 249, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(103, 232, 249, 0.055) 1px, transparent 1px);
+  }
+  .wg-scan {
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(34, 211, 238, 0.14) 48%,
+      rgba(34, 211, 238, 0.32) 50%,
+      rgba(34, 211, 238, 0.14) 52%,
+      transparent 100%
+    );
+  }
+}
+
+/* ==========================================================================
+   Dark-mode refinements
+   ========================================================================== */
+
+.dark ::selection {
+  background: rgba(45, 212, 238, 0.28);
+  color: #e9f3ed;
+}
+
+.dark * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(146, 223, 194, 0.25) transparent;
+}
+.dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(146, 223, 194, 0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(146, 223, 194, 0.32);
+  background-clip: padding-box;
+}
+
+/* ==========================================================================
+   Landing marquee
+   ========================================================================== */
+
+@keyframes wg-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ==========================================================================
+   Global polish
+   ========================================================================== */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Softer, theme-aware focus ring for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
