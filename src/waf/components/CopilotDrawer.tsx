@@ -90,16 +90,43 @@ export function CopilotDrawer() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [chat, thinking]);
 
-  const ask = (q: string) => {
+  const ask = async (q: string) => {
     const question = q.trim();
     if (!question || !context || thinking) return;
     setChat((c) => [...c, { role: "user", text: question }]);
     setDraft("");
     setThinking(true);
-    window.setTimeout(() => {
-      setChat((c) => [...c, { role: "ai", text: copilotReply(question, context, intel) }]);
-      setThinking(false);
-    }, 650);
+
+    try {
+      const resp = await fetch("http://localhost:8000/api/copilot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: question,
+          context: {
+            title: context.title,
+            kind: context.kind,
+            attackType: context.attackType,
+            severity: context.severity,
+            ruleId: context.ruleId,
+            matched: context.matched,
+          },
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && data.reply) {
+          setChat((c) => [...c, { role: "ai", text: data.reply }]);
+          setThinking(false);
+          return;
+        }
+      }
+    } catch {
+      // Graceful fallback to built-in intel if offline
+    }
+
+    setChat((c) => [...c, { role: "ai", text: copilotReply(question, context, intel) }]);
+    setThinking(false);
   };
 
   const copyText = (text: string, label: string) => {

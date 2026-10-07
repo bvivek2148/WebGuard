@@ -34,6 +34,7 @@ import {
   seedIncidents,
   seedIntegrations,
   SEED_CUSTOM_RULES,
+  SERVER_ORIGIN,
 } from "./data";
 import {
   DRILL_AUTO_ADVANCE_MS,
@@ -64,6 +65,7 @@ import type {
   CustomRule,
   DispatchEvent,
   FindingStatus,
+  HttpMethod,
   Incident,
   IncidentStage,
   IntegrationChannel,
@@ -229,6 +231,8 @@ export type WafAction =
   | { type: "BUCKET" }
   | { type: "ADD_ALARM"; alarm: Alarm }
   | { type: "INJECT_LOG"; log: RequestLog }
+  | { type: "SYNC_BLOCKLIST"; blocklist: BlockedIp[] }
+  | { type: "SYNC_SETTINGS"; mode?: WafMode; target?: string; sensitivity?: number; rateLimitRpm?: number }
   | { type: "START_AUDIT"; findings: AuditFinding[]; radar: RadarAxis[]; score: number }
   | { type: "AUDIT_PROGRESS"; delta: number }
   | { type: "ACK_ALARM"; id: string }
@@ -555,156 +559,70 @@ function makeDrill(scenarioId: string, startedAt: number, scheduled: boolean): D
 
 export function buildInitialState(): WafState {
   const now = Date.now();
-  const logs: RequestLog[] = [];
-  // ~70s of history so charts/map/stream are alive on first paint
-  for (let i = 64; i >= 0; i--) {
-    const ts = now - i * 1050;
-    logs.push(synthesizeLog(ts, "off", 1000 - i, false));
-  }
-  const series: SeriesPoint[] = [];
-  for (let i = 59; i >= 0; i--) {
-    const bucketStart = now - i * 1000;
-    const window = logs.filter((l) => l.ts >= bucketStart - 1000 && l.ts < bucketStart + 500);
-    series.push({
-      t: bucketStart,
-      label: new Date(bucketStart).toLocaleTimeString([], { minute: "2-digit", second: "2-digit" }),
-      rps: window.length,
-      blocked: window.filter((l) => l.blocked).length,
-      attacks: window.filter((l) => l.attackType).length,
-    });
-  }
-
   return {
     generation: 0,
     sessionStartedAt: now,
     mode: "off",
     target: "http://localhost:8080",
-    seq: 2000,
-    logs,
-    series,
-    totalRequests: logs.length + 214_800,
-    totalBlocked: 12_441,
-    totalAttacks: 34_872,
+    seq: 0,
+    logs: [],
+    series: [],
+    totalRequests: 0,
+    totalBlocked: 0,
+    totalAttacks: 0,
     bucket: { requests: 0, blocked: 0, attacks: 0 },
-    latencyAccum: logs.reduce((s, l) => s + l.latency, 0),
-    latencyCount: logs.length,
+    latencyAccum: 0,
+    latencyCount: 0,
     audit: {
       status: "idle",
       progress: 0,
       score: 0,
-      findings: BASELINE_FINDINGS,
-      comparison: COMPARISON,
+      findings: [],
+      comparison: [],
       radar: EMPTY_RADAR,
       verified: false,
-      baselineScore: AUDIT_BASELINE_SCORE,
-      baselineRadar: BASELINE_RADAR,
+      baselineScore: 0,
+      baselineRadar: EMPTY_RADAR,
       lastDelta: null,
     },
-    alarms: seedAlarms(now),
+    alarms: [],
     thresholds: { fivexx: 15, ddos: 120, entropy: 4.2 },
-    incidents: seedIncidents(now),
-    canaries: seedCanaries(now),
+    incidents: [],
+    canaries: [],
     rules: SEED_RULES.map((r) => ({ ...r })),
-    settings: { sensitivity: 0.85, rateLimitRpm: 600 },
+    settings: { sensitivity: 0.85, rateLimitRpm: 100 },
     sandbox: [],
     copilot: { open: false, generating: false, context: null },
     drill: null,
     drillQueue: [],
     drillLoop: false,
     schedule: { ...DEFAULT_DRILL_SCHEDULE },
-    drillReports: seedDrillReports(now),
-    drillHistory: [
-      {
-        id: "DL-SEED-1",
-        scenarioId: "recon-scout",
-        startedAt: now - 7_200_000,
-        finishedAt: now - 7_194_000,
-        outcome: "completed" as const,
-        stats: { requests: 238, blocked: 102, attacks: 131, alarms: 3, incidents: 0, canaryTrips: 2, bans: 4 },
-      },
-      {
-        id: "DL-SEED-2",
-        scenarioId: "cred-stuffing",
-        startedAt: now - 28_800_000,
-        finishedAt: now - 28_794_500,
-        outcome: "completed" as const,
-        stats: { requests: 402, blocked: 141, attacks: 214, alarms: 4, incidents: 1, canaryTrips: 0, bans: 6 },
-      },
-    ],
-    stress: { clients: 0.15, "edge-dns": 0.12, lb: 0.3, waf: 0.4, app: 0.35, db: 0.22 },
-    underAttack: true,
-    findings: seedFindings(now),
-    blocklist: seedBlocklist(now),
-    allowlist: [
-      {
-        id: "ALW-SEED-1",
-        ip: "203.0.113.0/24",
-        label: "Office VPN",
-        addedAt: now - 1_209_600_000,
-        hits: 1_842,
-      },
-      {
-        id: "ALW-SEED-2",
-        ip: "10.20.0.0/16",
-        label: "CI runner pool",
-        addedAt: now - 604_800_000,
-        hits: 9_214,
-      },
-    ],
-    customRules: SEED_CUSTOM_RULES.map((r) => ({ ...r })),
-    savedProbes: [
-      {
-        id: "SP-SEED-1",
-        label: "SQLi tautology probe",
-        method: "GET",
-        path: "/api/search?id=1",
-        payload: "id=1' OR 1=1--",
-      },
-      {
-        id: "SP-SEED-2",
-        label: "Encoded path traversal",
-        method: "GET",
-        path: "/api/download",
-        payload: "file=..%2F..%2F..%2Fetc%2Fpasswd",
-      },
-    ],
-    canaryTrips: seedCanaryTrips(now),
+    drillReports: [],
+    drillHistory: [],
+    stress: { clients: 0, "edge-dns": 0, lb: 0, waf: 0, app: 0, db: 0 },
+    underAttack: false,
+    findings: [],
+    blocklist: [],
+    allowlist: [],
+    customRules: [],
+    savedProbes: [],
+    canaryTrips: [],
     ipHits: {},
     banAutomation: { enabled: true, threshold: 6, expireHours: null },
     geoBlock: [],
     policySuggestion: null,
-    auditHistory: [
-      {
-        id: "AH-SEED",
-        ts: now - 7_200_000,
-        score: AUDIT_BASELINE_SCORE,
-        grade: "F",
-        shielded: false,
-        findings: BASELINE_FINDINGS.length,
-        target: "http://localhost:8080",
-      },
-    ],
-    integrations: seedIntegrations(),
+    auditHistory: [],
+    integrations: [],
     stressSeries: [],
-    dispatchLog: [
-      {
-        id: "DX-SEED",
-        channel: "slack" as IntegrationId,
-        event: "Critical alarm — SQLi burst on /api/search",
-        ts: now - 600_000,
-        ok: true,
-      },
-    ],
+    dispatchLog: [],
   };
 }
 
 // ============================================================================
-// Local persistence — the console survives reloads so a demo can be resumed
-// exactly where it was left off. Only durable control state is saved; the
-// live log / chart streams are re-seeded fresh on every load.
+// Local persistence
 // ============================================================================
 
-const PERSIST_KEY = "webguard.soc.v1";
+export const PERSIST_KEY = "webguard.soc.v1";
 
 const PERSISTED_KEYS = [
   "mode",
@@ -844,8 +762,29 @@ export function reducer(state: WafState, action: WafAction): WafState {
       return merged;
     }
 
+    case "SYNC_BLOCKLIST":
+      return { ...state, blocklist: action.blocklist };
+
+    case "SYNC_SETTINGS":
+      return {
+        ...state,
+        mode: action.mode ?? state.mode,
+        target: action.target ?? state.target,
+        settings: {
+          ...state.settings,
+          sensitivity: action.sensitivity ?? state.settings.sensitivity,
+          rateLimitRpm: action.rateLimitRpm ?? state.settings.rateLimitRpm,
+        },
+      };
+
     case "SET_MODE": {
       const mode = action.mode;
+      fetch("http://localhost:8000/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ waf_mode: mode }),
+      }).catch(() => {});
+
       let audit = state.audit;
       let findings = state.findings;
       if (audit.status === "done") {
@@ -867,8 +806,14 @@ export function reducer(state: WafState, action: WafAction): WafState {
       return { ...state, mode, audit, findings };
     }
 
-    case "SET_TARGET":
+    case "SET_TARGET": {
+      fetch("http://localhost:8000/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_url: action.target }),
+      }).catch(() => {});
       return { ...state, target: action.target };
+    }
 
     case "SET_DRILL_SCHEDULE": {
       const enabled = action.patch.enabled ?? state.schedule.enabled;
@@ -1444,14 +1389,63 @@ export function reducer(state: WafState, action: WafAction): WafState {
     case "ADD_ALARM":
       return { ...state, alarms: [action.alarm, ...state.alarms].slice(0, 40) };
 
-    case "INJECT_LOG":
+    case "INJECT_LOG": {
+      const isBlocked = action.log.blocked;
+      const isAttack = Boolean(action.log.attackType);
+      let blocklist = state.blocklist;
+      if (isBlocked && !blocklist.some((b) => b.ip === action.log.ip)) {
+        blocklist = [
+          {
+            id: `ban-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            ip: action.log.ip,
+            reason: `Blocked: ${action.log.attackType || "Malicious Payload"}`,
+            source: "auto",
+            country: action.log.country || "Local",
+            countryCode: action.log.countryCode || "LOC",
+            addedAt: Date.now(),
+            hits: 1,
+            active: true,
+            expiresAt: null,
+          },
+          ...blocklist,
+        ];
+      }
+      let alarms = state.alarms;
+      if (isAttack) {
+        alarms = [
+          {
+            id: `al-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            severity: "critical" as Severity,
+            title: `Detected ${action.log.attackType} on ${action.log.path}`,
+            source: `${action.log.ip} · ${action.log.city || "Client"}`,
+            ts: Date.now(),
+            state: "active" as const,
+            detail: `Threat score ${action.log.threatScore}/100. Action: ${isBlocked ? "Blocked 403" : "Logged"}.`,
+            ruleId: action.log.ruleId || "ML-RF-001",
+            sourceIp: action.log.ip,
+            countryCode: action.log.countryCode || "LOC",
+          },
+          ...alarms,
+        ].slice(0, 40);
+      }
       return {
         ...state,
         logs: [action.log, ...state.logs].slice(0, 240),
         totalRequests: state.totalRequests + 1,
-        totalBlocked: state.totalBlocked + (action.log.blocked ? 1 : 0),
-        totalAttacks: state.totalAttacks + (action.log.attackType ? 1 : 0),
+        totalBlocked: state.totalBlocked + (isBlocked ? 1 : 0),
+        totalAttacks: state.totalAttacks + (isAttack ? 1 : 0),
+        latencyAccum: state.latencyAccum + (action.log.latency || 0),
+        latencyCount: state.latencyCount + 1,
+        bucket: {
+          requests: state.bucket.requests + 1,
+          blocked: state.bucket.blocked + (isBlocked ? 1 : 0),
+          attacks: state.bucket.attacks + (isAttack ? 1 : 0),
+        },
+        blocklist,
+        alarms,
+        underAttack: isAttack || state.underAttack,
       };
+    }
 
     case "START_AUDIT":
       // The scan's findings/radar/score are generated at dispatch time (seeded
@@ -1843,6 +1837,32 @@ const WafContext = createContext<WafContextValue | null>(null);
 export function WafProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadInitialState);
 
+  const enhancedDispatch: Dispatch<WafAction> = (action) => {
+    if (action.type === "SET_MODE") {
+      fetch("http://localhost:8000/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ waf_mode: action.mode === "blocking" ? "blocking" : "detection" }),
+      }).catch(() => {});
+    } else if (action.type === "SET_TARGET") {
+      fetch("http://localhost:8000/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_url: action.target }),
+      }).catch(() => {});
+    } else if (action.type === "REMOVE_BLOCKED_IP") {
+      const entry = state.blocklist.find((b) => b.id === action.id);
+      if (entry) {
+        fetch("http://localhost:8000/api/blacklist/unblock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ client_ip: entry.ip }),
+        }).catch(() => {});
+      }
+    }
+    dispatch(action);
+  };
+
   // Ticking wall-clock for the live-window view (active threats / latency).
   // Kept as state so the derived context value stays a pure function of its
   // inputs (state + now) instead of calling Date.now() during render.
@@ -1876,10 +1896,135 @@ export function WafProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Telemetry tick (~3 req/s)
+  // Connect to Live FastAPI Backend WebSocket Telemetry (/ws/events)
   useEffect(() => {
-    const iv = window.setInterval(() => dispatch({ type: "TICK" }), 330);
-    return () => window.clearInterval(iv);
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: number | undefined;
+
+    function mapIncomingLog(raw: any): RequestLog {
+      const isBlocked = Boolean(raw.is_blocked);
+      let attackType: AttackType | null = null;
+      let ruleId: string | null = null;
+      const rawAttack = String(raw.attack_type || "");
+
+      if (rawAttack.includes("SQL")) {
+        attackType = "sqli";
+        ruleId = "OWASP-942100";
+      } else if (rawAttack.includes("Scripting") || rawAttack.includes("XSS")) {
+        attackType = "xss";
+        ruleId = "OWASP-941100";
+      } else if (rawAttack.includes("Traversal") || rawAttack.includes("Cmd")) {
+        attackType = "path-traversal";
+        ruleId = "OWASP-930120";
+      } else if (rawAttack.toLowerCase().includes("rate")) {
+        attackType = "bot";
+        ruleId = "RL-POLICY-001";
+      } else if (raw.entropy > 4.5) {
+        attackType = "high-entropy";
+        ruleId = "ML-ENTROPY-001";
+      }
+
+      const threatScore = attackType
+        ? Math.max(75, Math.round((raw.confidence || 0.9) * 100))
+        : Math.round((raw.confidence || 0) * 20);
+
+      return {
+        id: raw.id || `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        ts: raw.timestamp ? new Date(raw.timestamp).getTime() : Date.now(),
+        status: isBlocked ? 403 : (raw.status || 200),
+        method: (raw.method || "GET") as HttpMethod,
+        path: raw.path || "/",
+        ip: raw.client_ip || "127.0.0.1",
+        countryCode: "LOC",
+        country: "Local Host",
+        lat: SERVER_ORIGIN.lat,
+        lon: SERVER_ORIGIN.lon,
+        city: "Localhost",
+        latency: Math.round((raw.latency_ms || 1.2) * 100) / 100,
+        threatScore,
+        attackType,
+        ruleId,
+        blocked: isBlocked,
+        throttled: raw.status === 429,
+        entropy: raw.entropy ?? 0,
+        ua: "Real Client",
+        payload: raw.payload || null,
+        matched: attackType ? rawAttack : null,
+        headers: { Host: "localhost:8000" },
+      };
+    }
+
+    function connect() {
+      try {
+        ws = new WebSocket("ws://localhost:8000/ws/events");
+        ws.onopen = () => {
+          console.log("🟢 Connected to WebGuard Live WAF Telemetry (ws://localhost:8000/ws/events)");
+        };
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.log) {
+              const mapped = mapIncomingLog(data.log);
+              dispatch({ type: "INJECT_LOG", log: mapped });
+            }
+          } catch (e) {
+            console.error("Failed to parse telemetry event:", e);
+          }
+        };
+        ws.onclose = () => {
+          reconnectTimeout = window.setTimeout(connect, 3000);
+        };
+        ws.onerror = () => {
+          ws?.close();
+        };
+      } catch {
+        reconnectTimeout = window.setTimeout(connect, 3000);
+      }
+    }
+
+    connect();
+
+    // Initial sync with backend REST APIs
+    fetch("http://localhost:8000/api/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data) {
+          dispatch({
+            type: "SYNC_SETTINGS",
+            mode: data.waf_mode === "blocking" ? "blocking" : "detection",
+            target: data.target_url,
+            sensitivity: data.blocking_threshold,
+            rateLimitRpm: data.rate_limit_rpm,
+          });
+        }
+      })
+      .catch(() => {});
+
+    fetch("http://localhost:8000/api/blacklist")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && Array.isArray(data.blacklist)) {
+          const blocks: BlockedIp[] = data.blacklist.map((b: any, i: number) => ({
+            id: `ban-bk-${i}`,
+            ip: b.client_ip,
+            reason: b.reason || "Flagged by WAF",
+            source: "auto" as const,
+            country: "Local Host",
+            countryCode: "LOC",
+            addedAt: b.timestamp ? new Date(b.timestamp).getTime() : Date.now(),
+            hits: 1,
+            active: true,
+            expiresAt: null,
+          }));
+          dispatch({ type: "SYNC_BLOCKLIST", blocklist: blocks });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      ws?.close();
+    };
   }, []);
 
   // 1s analytics bucket
@@ -1954,7 +2099,7 @@ export function WafProvider({ children }: { children: ReactNode }) {
     const avgLatency =
       recent.length > 0 ? recent.reduce((s, l) => s + l.latency, 0) / recent.length : 0;
     const last = state.series[state.series.length - 1];
-    return { state, dispatch, currentRps: last?.rps ?? 0, activeThreats, avgLatency };
+    return { state, dispatch: enhancedDispatch, currentRps: last?.rps ?? 0, activeThreats, avgLatency };
   }, [state, now]);
 
   return <WafContext.Provider value={value}>{children}</WafContext.Provider>;

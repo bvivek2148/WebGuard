@@ -1,5 +1,51 @@
-.env.local
-node_modules
-dist
-src/convex/_generated
+# =============================================================================
+# WebGuard AI - Git Ignore Configuration
+# =============================================================================
+
+# Environment Variables & Secrets (Prevents leaking API keys)
 .env
+.env.local
+.env.*.local
+!.env.example
+
+# Node & Frontend Build
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Python Backend & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# SQLite Database Runtime Cache, Locks & Local Databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# OS & Editor Artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*

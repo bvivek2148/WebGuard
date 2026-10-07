@@ -95,12 +95,12 @@ describe("RESTORE_STATE", () => {
     });
     expect(next.mode).toBe("blocking");
     expect(next.target).toBe("https://demo.example.com");
-    // Untouched keys fall back to the seeded baseline…
-    expect(next.alarms.length).toBeGreaterThan(0);
-    expect(next.blocklist.length).toBeGreaterThan(0);
-    // …and live streams are re-seeded rather than carried over.
+    // Untouched keys fall back to the clean baseline…
+    expect(next.alarms.length).toBe(0);
+    expect(next.blocklist.length).toBe(0);
+    // …and live streams start clean with zero mock logs.
     expect(next.drill).toBeNull();
-    expect(next.logs.length).toBeGreaterThan(0);
+    expect(next.logs.length).toBe(0);
   });
 
   it("forces a mid-run audit to 'done' so the UI can never wedge", () => {

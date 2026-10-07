@@ -955,300 +955,34 @@ export const SEED_RULES: RuleSetting[] = [
   { id: "bots", label: "Bad Bot Crawlers", ruleIds: "BOT-001 · SCAN-002", action: "challenge" },
 ];
 
-export function seedAlarms(now: number): Alarm[] {
-  return [
-    {
-      id: "AL-1001",
-      severity: "critical",
-      title: "SQLi burst on /api/search — 41 attempts in 60s",
-      source: "91.134.22.7 · Frankfurt",
-      ts: now - 42_000,
-      state: "active",
-      detail: "OWASP-CRIT-942100 matched 41 requests carrying ' OR 1=1-- tautologies. Origin untouched; all dropped with 403.",
-      ruleId: "OWASP-CRIT-942100",
-      sourceIp: "91.134.22.7",
-      countryCode: "DE",
-    },
-    {
-      id: "AL-1002",
-      severity: "high",
-      title: "Command injection probe on /api/ping",
-      source: "45.155.4.12 · Frankfurt",
-      ts: now - 118_000,
-      state: "acknowledged",
-      detail: "Rule 932160 flagged ';cat /etc/passwd' payload chained after a benign host parameter.",
-      ruleId: "OWASP-CRIT-932160",
-      sourceIp: "45.155.4.12",
-      countryCode: "DE",
-    },
-    {
-      id: "AL-1003",
-      severity: "high",
-      title: "High-entropy archive upload quarantined",
-      source: "159.65.81.9 · Singapore",
-      ts: now - 264_000,
-      state: "active",
-      detail: "ML classifier scored 6.1 bits/char (threshold 0.85) on a Base64 blob with PK magic header.",
-      ruleId: "ML-ENTROPY-001",
-      sourceIp: "159.65.81.9",
-      countryCode: "SG",
-    },
-    {
-      id: "AL-1004",
-      severity: "medium",
-      title: "Distributed scanner sweep detected",
-      source: "Multi-origin · 7 /24 blocks",
-      ts: now - 540_000,
-      state: "snoozed",
-      detail: "Probes for /.env, /.git/config and /phpmyadmin/ from rotating IPs across 7 subnets.",
-      ruleId: "SCAN-DETECT-002",
-      sourceIp: "103.5.140.22",
-      countryCode: "JP",
-    },
-    {
-      id: "AL-1005",
-      severity: "low",
-      title: "Rate threshold approached on /api/login",
-      source: "92.40.19.8 · London",
-      ts: now - 900_000,
-      state: "resolved",
-      detail: "Login attempts reached 78% of the configured 10 req/min policy before normalizing.",
-      ruleId: "RL-POLICY-001",
-      sourceIp: "92.40.19.8",
-      countryCode: "GB",
-    },
-    // historical — resolved noise that fills the 12h volume chart
-    { id: "AL-1006", severity: "medium", title: "XSS sweep against /search", source: "185.220.101.34 · Berlin", ts: now - 3_600_000, state: "resolved", detail: "Script-bearing query strings probed across 12 parameter names; all reflected payloads neutralised.", ruleId: "OWASP-CRIT-941100", sourceIp: "185.220.101.34", countryCode: "DE" },
-    { id: "AL-1007", severity: "high", title: "Credential stuffing ramp on /api/login", source: "45.155.4.12 · Frankfurt", ts: now - 5_400_000, state: "resolved", detail: "Velocity climbed to 4.2 req/s from a single session before the bot policy throttled the source.", ruleId: "BOT-POLICY-003", sourceIp: "45.155.4.12", countryCode: "DE" },
-    { id: "AL-1008", severity: "low", title: "Sensitive-path probe /.env", source: "103.5.140.22 · Tokyo", ts: now - 7_200_000, state: "resolved", detail: "Single .env lookup from a known scanner subnet; response cloaked, source logged.", ruleId: "SCAN-DETECT-002", sourceIp: "103.5.140.22", countryCode: "JP" },
-    { id: "AL-1009", severity: "critical", title: "Command injection chain on /api/ping", source: "128.199.44.2 · Singapore", ts: now - 9_000_000, state: "resolved", detail: "Semicolon-chained shell metacharacters; 9 variants blocked by OWASP-CRIT-932160 in 90s.", ruleId: "OWASP-CRIT-932160", sourceIp: "128.199.44.2", countryCode: "SG" },
-    { id: "AL-1010", severity: "medium", title: "JWT tampering attempts blocked", source: "133.242.7.101 · Tokyo", ts: now - 10_800_000, state: "resolved", detail: "Signature-forged tokens rejected by the edge JWKS validator across /api/v2 endpoints.", ruleId: "JWT-VALID-004", sourceIp: "133.242.7.101", countryCode: "JP" },
-  ];
+export function seedAlarms(_now: number): Alarm[] {
+  return [];
 }
 
-export function seedIncidents(now: number): Incident[] {
-  return [
-    {
-      id: "INC-501",
-      title: "Credential stuffing campaign against /api/login",
-      vector: "Bad Bot",
-      severity: "critical",
-      sourceIp: "45.155.4.12",
-      country: "DE",
-      stage: "investigating",
-      openedAt: now - 90_000,
-      closedAt: null,
-      detail: "Distributed botnet rotating IPs across three /24 blocks. 2,180 attempts in 12 minutes; 9 accounts locked.",
-      playbook: null,
-    },
-    {
-      id: "INC-502",
-      title: "Reflected XSS probe on /search",
-      vector: "Cross-Site Scripting",
-      severity: "high",
-      sourceIp: "128.199.44.2",
-      country: "SG",
-      stage: "mitigated",
-      openedAt: now - 340_000,
-      closedAt: null,
-      detail: "Script-bearing queries reflected off the search endpoint. Edge encoding patch deployed; origin fix pending.",
-      playbook: "lockdown",
-    },
-    {
-      id: "INC-503",
-      title: "Webshell staging upload detected",
-      vector: "High-Entropy Payload",
-      severity: "high",
-      sourceIp: "159.65.81.9",
-      country: "SG",
-      stage: "investigating",
-      openedAt: now - 700_000,
-      closedAt: null,
-      detail: "Base64 PK archive matched entropy classifier. Upload sandboxing reviewed — no file reached origin.",
-      playbook: null,
-    },
-    {
-      id: "INC-504",
-      title: "Path traversal sweep of download API",
-      vector: "Path Traversal",
-      severity: "medium",
-      sourceIp: "133.242.7.101",
-      country: "JP",
-      stage: "resolved",
-      openedAt: now - 3_600_000,
-      closedAt: now - 2_940_000,
-      detail: "../../../../etc/passwd probes against /api/download. All 14 requests blocked by rule 930120.",
-      playbook: "quarantine",
-    },
-    {
-      id: "INC-505",
-      title: "Recon scan of admin infrastructure",
-      vector: "Recon Scanner",
-      severity: "low",
-      sourceIp: "103.5.140.22",
-      country: "JP",
-      stage: "resolved",
-      openedAt: now - 8_600_000,
-      closedAt: now - 7_980_000,
-      detail: "Scan of /.env, /backup/ and default admin paths. Sensitive paths now return 403 by policy.",
-      playbook: null,
-    },
-  ];
+export function seedIncidents(_now: number): Incident[] {
+  return [];
 }
 
-export function seedCanaries(now: number): CanaryToken[] {
-  return [
-    { id: "CAN-001", key: "<!-- wg-canary:a3f9c2 -->", placement: "HTML comment (homepage)", trips: 3, lastIp: "91.134.22.7", banned: true, createdAt: now - 86_400_000 },
-    { id: "CAN-002", key: '<input type="hidden" name="wg_trap" value="f7e1b4">', placement: "Hidden form input (login)", trips: 1, lastIp: "159.65.81.9", banned: false, createdAt: now - 43_200_000 },
-    { id: "CAN-003", key: "X-WebGuard-Canary: 88d1a0e2", placement: "Custom response header", trips: 2, lastIp: "45.155.4.12", banned: false, createdAt: now - 21_600_000 },
-  ];
+export function seedCanaries(_now: number): CanaryToken[] {
+  return [];
 }
 
-export function seedCanaryTrips(now: number): CanaryTrip[] {
-  return [
-    { id: "CT-01", tokenId: "CAN-001", ip: "91.134.22.7", ts: now - 86_000_000 },
-    { id: "CT-02", tokenId: "CAN-001", ip: "91.134.23.9", ts: now - 86_000_040 },
-    { id: "CT-03", tokenId: "CAN-001", ip: "91.134.22.7", ts: now - 85_999_980 },
-    { id: "CT-04", tokenId: "CAN-002", ip: "159.65.81.9", ts: now - 2_100_000 },
-    { id: "CT-05", tokenId: "CAN-003", ip: "45.155.4.12", ts: now - 900_000 },
-  ];
+export function seedCanaryTrips(_now: number): CanaryTrip[] {
+  return [];
 }
 
-// ============================================================================
-// Seed data: vulnerability register + access control
-// ============================================================================
-
-export function seedFindings(now: number): VulnFinding[] {
-  return [
-    {
-      id: "audit:HDR-01",
-      title: "Missing HSTS header",
-      severity: "high",
-      source: "audit",
-      status: "open",
-      discoveredAt: now - 7_200_000,
-      lastSeen: now - 7_200_000,
-      count: 1,
-      evidence: "HTTP/1.1 200 OK\nServer: Apache/2.4.41 (Ubuntu)\n(no Strict-Transport-Security header present)",
-      patch: "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload",
-      ruleId: "HDR-01",
-      path: null,
-      pillar: "headers",
-    },
-    {
-      id: "audit:INJ-01",
-      title: "Reflected SQL parameter in /api/search",
-      severity: "critical",
-      source: "audit",
-      status: "open",
-      discoveredAt: now - 7_200_000,
-      lastSeen: now - 7_200_000,
-      count: 1,
-      evidence: "GET /api/search?id=1' OR 1=1-- HTTP/1.1\n200 OK — 1,482 rows returned",
-      patch: "Virtual patch: parameterized query + input validation (^[0-9]+$) + OWASP CRS rule 942100 enforced at edge",
-      ruleId: "INJ-01",
-      path: "/api/search",
-      pillar: "injection",
-    },
-    {
-      id: "live:OWASP-CRIT-942100:/api/search",
-      title: "SQL Injection against /api/search",
-      severity: "critical",
-      source: "live",
-      status: "open",
-      discoveredAt: now - 300_000,
-      lastSeen: now - 45_000,
-      count: 41,
-      evidence: "GET /api/search?id=1' OR 1=1--\nrule OWASP-CRIT-942100 · 91.134.22.7 (Germany) · entropy 3.42 bits/char\nverdict: 403 BLOCKED at edge",
-      patch: "Enforce OWASP-CRIT-942100 at the edge · reject payload pattern 'OR 1=1'",
-      ruleId: "OWASP-CRIT-942100",
-      path: "/api/search",
-      pillar: null,
-    },
-    {
-      id: "live:ML-ENTROPY-001:/api/upload",
-      title: "High-Entropy Payload against /api/upload",
-      severity: "high",
-      source: "live",
-      status: "investigating",
-      discoveredAt: now - 600_000,
-      lastSeen: now - 264_000,
-      count: 3,
-      evidence: "POST /api/upload\nrule ML-ENTROPY-001 · 159.65.81.9 (Singapore) · entropy 6.10 bits/char\nverdict: 403 BLOCKED at edge",
-      patch: "Enforce ML-ENTROPY-001 at the edge · reject payload pattern 'UEsDBAo'",
-      ruleId: "ML-ENTROPY-001",
-      path: "/api/upload",
-      pillar: null,
-    },
-    {
-      id: "audit:RL-01",
-      title: "No rate limiting on /api/login",
-      severity: "critical",
-      source: "audit",
-      status: "open",
-      discoveredAt: now - 7_200_000,
-      lastSeen: now - 7_200_000,
-      count: 1,
-      evidence: "POST /api/login — 200 OK\n12,400 requests from 91.134.22.7 in 90s — all processed",
-      patch: "Virtual patch: 10 req/min per IP + progressive lockout + CAPTCHA challenge above threshold",
-      ruleId: "RL-01",
-      path: "/api/login",
-      pillar: "ratelimit",
-    },
-  ];
+export function seedFindings(_now: number): VulnFinding[] {
+  return [];
 }
 
-export function seedBlocklist(now: number): BlockedIp[] {
-  return [
-    { id: "BAN-001", ip: "91.134.22.0/24", reason: "Auto-ban — 6+ blocked requests from subnet", source: "auto", country: "Germany", countryCode: "DE", addedAt: now - 360_000, hits: 14, active: true, expiresAt: null },
-    { id: "BAN-002", ip: "45.155.4.12", reason: "Canary tripped ×3 — HTML comment (homepage)", source: "canary", country: "Germany", countryCode: "DE", addedAt: now - 86_000_000, hits: 5, active: true, expiresAt: null },
-    { id: "BAN-003", ip: "159.65.81.9", reason: "Manual ban — repeated webshell upload attempts", source: "manual", country: "Singapore", countryCode: "SG", addedAt: now - 1_800_000, hits: 3, active: true, expiresAt: null },
-    { id: "BAN-004", ip: "103.5.140.0/24", reason: "Auto-ban — distributed recon sweep", source: "auto", country: "Japan", countryCode: "JP", addedAt: now - 5_400_000, hits: 22, active: true, expiresAt: null },
-  ];
+export function seedBlocklist(_now: number): BlockedIp[] {
+  return [];
 }
 
-export const SEED_CUSTOM_RULES: CustomRule[] = [
-  { id: "CR-01", name: "Block /admin panel", matchType: "path", matchValue: "/admin", action: "block", enabled: true, hits: 312 },
-  { id: "CR-02", name: "Deny curl tooling", matchType: "ua", matchValue: "curl", action: "block", enabled: true, hits: 48 },
-  { id: "CR-03", name: "Challenge RU datacenter traffic", matchType: "country", matchValue: "ru", action: "challenge", enabled: true, hits: 97 },
-  { id: "CR-04", name: "Block PHP file requests", matchType: "path", matchValue: ".php", action: "block", enabled: false, hits: 0 },
-];
+export const SEED_CUSTOM_RULES: CustomRule[] = [];
 
 export function seedIntegrations(): IntegrationChannel[] {
-  return [
-    {
-      id: "slack",
-      label: "Slack",
-      hint: "Critical alarms + incident auto-open alerts",
-      enabled: true,
-      target: "https://hooks.slack.com/services/T000000/B000000/xxxxxxxx",
-      placeholder: "https://hooks.slack.com/services/…",
-    },
-    {
-      id: "pagerduty",
-      label: "PagerDuty",
-      hint: "Escalate high & critical incidents to on-call",
-      enabled: false,
-      target: "",
-      placeholder: "Integration key (Events API v2)…",
-    },
-    {
-      id: "email",
-      label: "Email digest",
-      hint: "Daily posture summary + weekly vulnerability digest",
-      enabled: false,
-      target: "soc@example.com",
-      placeholder: "soc@example.com",
-    },
-    {
-      id: "webhook",
-      label: "Generic webhook",
-      hint: "POST JSON for every blocked request (sampled)",
-      enabled: true,
-      target: "https://collector.example.com/wg-events",
-      placeholder: "https://your-endpoint.example.com/events",
-    },
-  ];
+  return [];
 }
 
 export const PLAYBOOKS: {

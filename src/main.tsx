@@ -1,8 +1,5 @@
-import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
 import { RequireAuth } from "@/components/RequireAuth";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
 import { ThemeProvider } from "next-themes";
 import React, { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -27,7 +24,7 @@ class RootErrorBoundary extends React.Component<
     };
   }
   componentDidCatch(err: Error) {
-    console.error("[WebContainer preview] Root crash:", err);
+    console.error("[Root crash]:", err);
   }
   render() {
     if (this.state.hasError) {
@@ -42,10 +39,6 @@ class RootErrorBoundary extends React.Component<
     return this.props.children;
   }
 }
-
-const convex = new ConvexReactClient(
-  import.meta.env.VITE_CONVEX_URL || "https://placeholder.convex.cloud"
-);
 
 function RouteSyncer() {
   const location = useLocation();
@@ -74,28 +67,26 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
-        <ConvexAuthProvider client={convex}>
-          <BrowserRouter>
-            <RouteSyncer />
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <RequireAuth>
-                    <Dashboard />
-                  </RequireAuth>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-          <Toaster />
-        </ConvexAuthProvider>
+        <BrowserRouter>
+          <RouteSyncer />
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route
+              path="/auth"
+              element={<AuthPage redirectAfterAuth="/dashboard" />}
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <RequireAuth>
+                  <Dashboard />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+        <Toaster />
       </ThemeProvider>
     </RootErrorBoundary>
   </StrictMode>,

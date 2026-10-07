@@ -398,8 +398,8 @@ export default function Landing() {
   }, []);
 
   const item = TICKER[tick];
-  const ctaHref = isAuthenticated ? "/dashboard" : "/auth";
-  const ctaLabel = isAuthenticated ? "Open Dashboard" : "Launch Console";
+  const ctaHref = "/dashboard";
+  const ctaLabel = "Open SOC Dashboard";
 
   return (
     <div className="min-h-screen bg-background text-foreground">

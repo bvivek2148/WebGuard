@@ -4,6 +4,7 @@ import math
 import time
 import json
 import asyncio
+import urllib.parse
 from collections import deque, defaultdict
 from contextlib import asynccontextmanager
 from typing import Dict, List, Set, Optional
@@ -11,6 +12,9 @@ from typing import Dict, List, Set, Optional
 # Ensure stdout handles UTF-8 on Windows PowerShell
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import database
 
 import joblib
 import httpx
@@ -46,7 +50,15 @@ request_logs: List[dict] = []
 rate_limit_tracker: Dict[str, deque] = defaultdict(deque)
 connected_websockets: List[WebSocket] = []
 
-ATTACK_LABELS = {0: "None", 1: "SQL Injection", 2: "Cross-Site Scripting", 3: "Path Traversal"}
+ATTACK_LABELS = {
+    0: "None",
+    1: "SQL Injection",
+    2: "Cross-Site Scripting",
+    3: "Path Traversal",
+    4: "Server-Side Request Forgery",
+    5: "NoSQL Injection",
+    6: "Remote Code Execution"
+}
 
 # ============================================================================
 # 2. Shannon Entropy & ML Utility Functions
@@ -78,21 +90,55 @@ def check_rate_limit(client_ip: str, limit_rpm: int = 100) -> bool:
 import re
 
 OWASP_PATTERNS = [
-    (re.compile(r"('|\")\s*(or|and)\s*('|\"|\d|\w)\s*=\s*('|\"|\d|\w)", re.IGNORECASE), "SQL Injection"),
-    (re.compile(r"union\s+all\s+select|union\s+select", re.IGNORECASE), "SQL Injection"),
-    (re.compile(r";\s*(drop|insert|delete|update|exec|alter)\s+", re.IGNORECASE), "SQL Injection"),
-    (re.compile(r"(--|#|/\*)\s*", re.IGNORECASE), "SQL Injection"),
+    (re.compile(r"('|\")?\s*(or|and)\s+('?\w+'?|\d+)\s*=\s*('?\w+'?|\d+)", re.IGNORECASE), "SQL Injection"),
+    (re.compile(r"union[\s\+]+all[\s\+]+select|union[\s\+]+select", re.IGNORECASE), "SQL Injection"),
+    (re.compile(r";[\s\+]*(drop|insert|delete|update|exec|alter)[\s\+]+", re.IGNORECASE), "SQL Injection"),
+    (re.compile(r"(--|#|/\*)", re.IGNORECASE), "SQL Injection"),
     (re.compile(r"<script[^>]*>|<svg[^>]*onload|<img[^>]*onerror|javascript:", re.IGNORECASE), "Cross-Site Scripting"),
-    (re.compile(r"\.\./\.\./|\.\.\\\.\.\\|/etc/passwd|win\.ini", re.IGNORECASE), "Path Traversal"),
+    (re.compile(r"\.\./|\.\.\\|/etc/passwd|win\.ini|/WEB-INF/", re.IGNORECASE), "Path Traversal"),
+    (re.compile(r"169\.254\.169\.254|metadata\.google\.internal|(gopher|dict|file)://", re.IGNORECASE), "Server-Side Request Forgery"),
+    (re.compile(r"\$(gt|ne|where|regex|nin|exists)\b", re.IGNORECASE), "NoSQL Injection"),
+    (re.compile(r"\$\{jndi:(ldap|rmi|dns|nis):|;\s*(system|exec|passthru|shell_exec|curl|wget)\b", re.IGNORECASE), "Remote Code Execution"),
 ]
+
+def load_ml_models() -> bool:
+    """Loads trained Random Forest model and TF-IDF vectorizer, auto-training if missing."""
+    global vectorizer, rf_model
+    if vectorizer is not None and rf_model is not None:
+        return True
+    if os.path.exists(VECTORIZER_PATH) and os.path.exists(RF_MODEL_PATH):
+        try:
+            vectorizer = joblib.load(VECTORIZER_PATH)
+            rf_model = joblib.load(RF_MODEL_PATH)
+            print("✅ Loaded Random Forest Model & TF-IDF Vectorizer from disk.")
+            return True
+        except Exception as e:
+            print(f"❌ Failed loading model artifacts: {e}")
+            return False
+    else:
+        print("⚠️ Model artifacts missing. Auto-training Random Forest model now...")
+        try:
+            import train_model
+            train_model.train_model()
+            vectorizer = joblib.load(VECTORIZER_PATH)
+            rf_model = joblib.load(RF_MODEL_PATH)
+            print("✅ Successfully trained and loaded Random Forest model & vectorizer.")
+            return True
+        except Exception as e:
+            print(f"❌ Auto-training failed: {e}")
+            return False
 
 def evaluate_payload_ml(query_str: str, body_str: str, path: str) -> dict:
     """Combines OWASP regex signatures and Random Forest ML classification."""
-    eval_text = f"{path} {query_str} {body_str}".strip()
+    decoded_path = urllib.parse.unquote_plus(path)
+    decoded_query = urllib.parse.unquote_plus(query_str)
+    decoded_body = urllib.parse.unquote_plus(body_str)
+    eval_text = f"{decoded_path} {decoded_query} {decoded_body}".strip()
+    raw_text = f"{path} {query_str} {body_str}".strip()
 
     # 1. OWASP Signature Fast-Path Check
     for pattern, attack_cat in OWASP_PATTERNS:
-        if pattern.search(eval_text):
+        if pattern.search(eval_text) or pattern.search(raw_text):
             return {
                 "attack_type": attack_cat,
                 "confidence": 0.99,
@@ -101,7 +147,10 @@ def evaluate_payload_ml(query_str: str, body_str: str, path: str) -> dict:
             }
 
     # 2. Random Forest ML Inference
-    if not vectorizer or not rf_model or not eval_text:
+    if (vectorizer is None or rf_model is None) and not load_ml_models():
+        return {"attack_type": "None", "confidence": 0.0, "is_attack": False, "detection_engine": "None"}
+
+    if not eval_text:
         return {"attack_type": "None", "confidence": 0.0, "is_attack": False, "detection_engine": "None"}
 
     try:
@@ -142,25 +191,33 @@ async def broadcast_event(event_data: dict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global vectorizer, rf_model
     print("=" * 60)
     print("🛡️ Initializing WebGuard AI WAF Proxy Backend (FastAPI)")
     print("=" * 60)
 
-    if os.path.exists(VECTORIZER_PATH) and os.path.exists(RF_MODEL_PATH):
-        try:
-            vectorizer = joblib.load(VECTORIZER_PATH)
-            rf_model = joblib.load(RF_MODEL_PATH)
-            print("✅ Loaded Random Forest Model & TF-IDF Vectorizer from disk.")
-        except Exception as e:
-            print(f"❌ Failed loading model artifacts: {e}")
+    database.init_db()
+    db_settings = database.load_settings()
+    if db_settings:
+        settings.update(db_settings)
+    persisted_bl = database.load_blacklist()
+    for b in persisted_bl:
+        blacklisted_ips.add(b["client_ip"])
+    blacklist_records.extend(persisted_bl)
+
+    if load_ml_models():
+        print("🛡️ WebGuard Defense Engines Active & Armed.")
     else:
-        print("⚠️ Model files not found! Run 'python train_model.py' to generate artifacts.")
+        print("⚠️ Warning: Machine learning model could not be armed.")
 
     yield
     print("🛑 Shutting down WebGuard Backend.")
 
-app = FastAPI(title="WebGuard AI WAF & Threat Intel Server", lifespan=lifespan)
+app = FastAPI(
+    title="WebGuard AI WAF & Threat Intel Server",
+    description="Real-time Web Application Firewall powered by FastAPI, SQLite, WebSockets, and Scikit-Learn.",
+    version="2.0.0",
+    lifespan=lifespan
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -169,6 +226,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/", tags=["Health"])
+@app.get("/api/health", tags=["Health"])
+def health_check():
+    return {
+        "service": "WebGuard AI WAF & Reverse Proxy",
+        "status": "operational",
+        "version": "2.0.0",
+        "waf_mode": settings["waf_mode"],
+        "target_url": settings["target_url"],
+        "ml_model_loaded": rf_model is not None,
+        "db_status": "connected (SQLite WAL)",
+        "active_websockets": len(connected_websockets),
+        "blacklisted_ips_count": len(blacklisted_ips),
+        "endpoints": {
+            "proxy": "/proxy/{path}",
+            "health": "/api/health",
+            "settings": "/api/settings",
+            "logs": "/api/logs",
+            "blacklist": "/api/blacklist",
+            "auth": "/api/auth/login",
+            "audit_scan": "/api/audit/scan",
+            "websocket": "/ws/events",
+            "docs": "/docs"
+        }
+    }
 
 # ============================================================================
 # 4. Reverse Proxy & WAF Interceptor Engine
@@ -190,8 +273,10 @@ async def waf_reverse_proxy(request: Request, path: str = ""):
 
     # 2. Sliding Window Rate Limit Check
     if check_rate_limit(client_ip, settings["rate_limit_rpm"]):
+        reason = "Rate Limit Exceeded"
         blacklisted_ips.add(client_ip)
-        blacklist_records.append({"client_ip": client_ip, "reason": "Rate Limit Exceeded", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")})
+        blacklist_records.append({"client_ip": client_ip, "reason": reason, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")})
+        database.add_blacklist_ip(client_ip, reason)
         log_entry = create_log_entry(request, client_ip, "Blocked (Rate Limit)", "Rate Limit Exceeded", 0.99, True, 0.0)
         asyncio.create_task(broadcast_event({"event_type": "request_blocked", "log": log_entry}))
         return JSONResponse(
@@ -217,12 +302,14 @@ async def waf_reverse_proxy(request: Request, path: str = ""):
     if ml_result["is_attack"]:
         if settings["waf_mode"] == "blocking":
             is_blocked = True
+            reason = f"Random Forest Flagged: {ml_result['attack_type']} ({int(ml_result['confidence']*100)}% confidence)"
             blacklisted_ips.add(client_ip)
             blacklist_records.append({
                 "client_ip": client_ip,
-                "reason": f"Random Forest Flagged: {ml_result['attack_type']} ({int(ml_result['confidence']*100)}% confidence)",
+                "reason": reason,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")
             })
+            database.add_blacklist_ip(client_ip, reason)
             log_entry = create_log_entry(request, client_ip, full_payload, ml_result["attack_type"], ml_result["confidence"], True, entropy)
             asyncio.create_task(broadcast_event({"event_type": "request_blocked", "log": log_entry}))
             return JSONResponse(
@@ -238,7 +325,8 @@ async def waf_reverse_proxy(request: Request, path: str = ""):
 
     # 5. Forward Clean Traffic to Target Backend URL
     target_backend = settings["target_url"].rstrip("/")
-    destination_url = f"{target_backend}{path}"
+    target_path = path if (not path or path.startswith("/")) else f"/{path}"
+    destination_url = f"{target_backend}{target_path}"
     if request.url.query:
         destination_url += f"?{request.url.query}"
 
@@ -247,7 +335,7 @@ async def waf_reverse_proxy(request: Request, path: str = ""):
     forward_headers["x-forwarded-proto"] = request.url.scheme
     forward_headers.pop("host", None)
 
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, verify=False, follow_redirects=True) as client:
         try:
             resp = await client.request(
                 method=request.method,
@@ -291,6 +379,7 @@ def create_log_entry(request: Request, client_ip: str, payload: str, attack_type
     request_logs.append(entry)
     if len(request_logs) > 500:
         request_logs.pop(0)
+    database.insert_request_log(entry)
     return entry
 
 # ============================================================================
@@ -321,32 +410,52 @@ class SettingsUpdate(BaseModel):
 class UnblockRequest(BaseModel):
     client_ip: str
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
 class AuditScanRequest(BaseModel):
     target_url: str
+
+@app.post("/api/auth/login")
+def login(body: LoginRequest):
+    user = database.authenticate_user(body.username, body.password)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
+    token = f"token-{user['username']}-{int(time.time()*1000)}"
+    return {"status": "success", "token": token, "user": user}
 
 @app.get("/api/settings")
 def get_settings():
     return settings
 
-@app.post("/api/settings")
+@app.api_route("/api/settings", methods=["POST", "PUT"])
 def update_settings(body: SettingsUpdate):
-    if body.waf_mode:
+    if body.waf_mode and body.waf_mode in ["blocking", "detection", "off"]:
         settings["waf_mode"] = body.waf_mode
+        database.save_setting("waf_mode", body.waf_mode)
     if body.target_url:
-        settings["target_url"] = body.target_url
-    if body.blocking_threshold is not None:
+        val = body.target_url.strip()
+        if val.startswith("http://") or val.startswith("https://"):
+            settings["target_url"] = val
+            database.save_setting("target_url", val)
+    if body.blocking_threshold is not None and 0.0 <= body.blocking_threshold <= 1.0:
         settings["blocking_threshold"] = body.blocking_threshold
-    if body.rate_limit_rpm is not None:
+        database.save_setting("blocking_threshold", body.blocking_threshold)
+    if body.rate_limit_rpm is not None and body.rate_limit_rpm > 0:
         settings["rate_limit_rpm"] = body.rate_limit_rpm
+        database.save_setting("rate_limit_rpm", body.rate_limit_rpm)
     return {"status": "success", "settings": settings}
 
 @app.get("/api/logs")
 def get_logs():
-    return {"logs": request_logs[-100:]}
+    db_logs = database.get_recent_logs(100)
+    return {"logs": db_logs if db_logs else request_logs[-100:]}
 
 @app.get("/api/blacklist")
 def get_blacklist():
-    return {"blacklist": blacklist_records}
+    db_blacklist = database.load_blacklist()
+    return {"blacklist": db_blacklist if db_blacklist else blacklist_records}
 
 @app.post("/api/blacklist/unblock")
 def unblock_ip(body: UnblockRequest):
@@ -354,6 +463,7 @@ def unblock_ip(body: UnblockRequest):
         blacklisted_ips.remove(body.client_ip)
     global blacklist_records
     blacklist_records = [r for r in blacklist_records if r["client_ip"] != body.client_ip]
+    database.remove_blacklist_ip(body.client_ip)
     return {"status": "success", "unblocked": body.client_ip}
 
 # ============================================================================
@@ -414,6 +524,87 @@ async def scan_url_vulnerabilities(body: AuditScanRequest):
         "scanned_at": time.strftime("%Y-%m-%dT%H:%M:%SZ")
     }
 
+# ============================================================================
+# 8. Google Gemini AI Generative Copilot & Remediation Engine
+# ============================================================================
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6LBzyLlgqKFTdCyyx91ndzjZ8GXLTntCX7gQsY2zanjbw")
+
+class CopilotChatRequest(BaseModel):
+    message: str
+    context: Optional[dict] = None
+
+class CopilotExplainRequest(BaseModel):
+    payload: str
+    attack_type: str
+    path: str
+    method: str = "GET"
+
+@app.post("/api/copilot/chat")
+async def copilot_chat(body: CopilotChatRequest):
+    """Answers security questions and SOC queries using Google Gemini 2.5 Flash."""
+    context_str = ""
+    if body.context:
+        context_str = f"\nRelevant Threat Context: {json.dumps(body.context)}"
+
+    prompt = f"""You are WebGuard AI Copilot, an elite cybersecurity and SOC defense specialist.
+Provide clear, actionable, professional cybersecurity guidance. Keep explanations crisp, practical, and provide code or configuration snippets when relevant.
+{context_str}
+
+User Question: {body.message}
+"""
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
+        try:
+            resp = await client.post(endpoint, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                reply_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                return {"status": "success", "reply": reply_text, "model": "gemini-2.5-flash"}
+            else:
+                return {"status": "error", "reply": f"Gemini API error ({resp.status_code}): {resp.text[:200]}"}
+        except Exception as e:
+            return {"status": "error", "reply": f"Failed to connect to Gemini AI: {type(e).__name__} {e}"}
+
+@app.post("/api/copilot/explain")
+async def copilot_explain(body: CopilotExplainRequest):
+    """Generates full incident triage with Gemini AI: Threat Summary, Root Cause, Code Patch, and Custom WAF Rule."""
+    prompt = f"""Analyze this intercepted cyber attack detected by WebGuard AI WAF:
+- Attack Type: {body.attack_type}
+- HTTP Method: {body.method}
+- Target Path: {body.path}
+- Malicious Payload: {body.payload}
+
+Provide a structured, executive-level triage report in markdown. Keep each section concise (2-3 sentences each):
+1. **Threat Summary**: What is the attacker attempting to achieve?
+2. **Technical Impact**: What systems would be compromised if not blocked?
+3. **Recommended Code Remediation**: Brief code snippet (Python or JS) showing proper input sanitization or parameterization.
+4. **Custom WAF Defense Rule**: A regex or ModSecurity rule to block variations.
+"""
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "maxOutputTokens": 700,
+            "temperature": 0.2
+        }
+    }
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(45.0, connect=10.0)) as client:
+        try:
+            resp = await client.post(endpoint, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                analysis = data["candidates"][0]["content"]["parts"][0]["text"]
+                return {"status": "success", "analysis": analysis, "model": "gemini-2.5-flash"}
+            else:
+                return {"status": "error", "analysis": f"Gemini API error ({resp.status_code}): {resp.text[:200]}"}
+        except Exception as e:
+            return {"status": "error", "analysis": f"Failed to reach Gemini AI: {type(e).__name__} {e}"}
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True, reload_dirs=[backend_dir], app_dir=backend_dir)

