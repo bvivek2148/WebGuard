@@ -84,13 +84,23 @@ def init_db():
             );
         """)
 
-        # Default Admin Account: admin / admin123
-        cursor.execute("SELECT id FROM admin_users WHERE username = 'admin';")
-        if not cursor.fetchone():
-            p_hash, salt = hash_password("admin123")
+        # Default Master SuperAdmin Account: admin@webguard.project / WebGuard@Major_Project_B38
+        p_hash, salt = hash_password("WebGuard@Major_Project_B38")
+        cursor.execute("SELECT id FROM admin_users WHERE username IN ('admin@webguard.project', 'admin');")
+        existing_admin = cursor.fetchone()
+        if not existing_admin:
             cursor.execute(
                 "INSERT INTO admin_users (username, password_hash, salt, role) VALUES (?, ?, ?, ?);",
-                ("admin", p_hash, salt, "SOC Lead")
+                ("admin@webguard.project", p_hash, salt, "SuperAdmin (Full Access)")
+            )
+            cursor.execute(
+                "INSERT INTO admin_users (username, password_hash, salt, role) VALUES (?, ?, ?, ?);",
+                ("admin", p_hash, salt, "SuperAdmin (Full Access)")
+            )
+        else:
+            cursor.execute(
+                "UPDATE admin_users SET username = 'admin@webguard.project', password_hash = ?, salt = ?, role = 'SuperAdmin (Full Access)' WHERE id = ?;",
+                (p_hash, salt, existing_admin["id"])
             )
 
         # Default Settings

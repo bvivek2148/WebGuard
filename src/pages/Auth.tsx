@@ -77,8 +77,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     redirectAfterAuth,
   );
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
-  const [email, setEmail] = useState("admin@webguard.internal");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("admin@webguard.project");
+  const [password, setPassword] = useState("WebGuard@Major_Project_B38");
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -260,7 +260,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           name="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          placeholder="admin@webguard.internal"
+                          placeholder="admin@webguard.project"
                           type="text"
                           className="pl-9 h-10 text-xs font-medium"
                           disabled={isLoading}
@@ -275,7 +275,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         <label className="block text-xs font-semibold text-foreground">
                           Password
                         </label>
-                        <span className="text-[10px] text-muted-foreground font-medium">Default: admin123</span>
+                        <span className="text-[10px] text-muted-foreground font-medium">Major Project B38</span>
                       </div>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -321,16 +321,16 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
 
                     {/* Quick Demo Credentials */}
                     <div className="flex items-center justify-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
-                      <span>Demo Account:</span>
+                      <span>SuperAdmin:</span>
                       <button
                         type="button"
                         onClick={() => {
-                          setEmail("admin@webguard.internal");
-                          setPassword("admin123");
+                          setEmail("admin@webguard.project");
+                          setPassword("WebGuard@Major_Project_B38");
                         }}
-                        className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-foreground hover:bg-muted/80 transition"
+                        className="rounded bg-muted px-2 py-0.5 font-mono text-[10px] font-semibold text-foreground hover:bg-muted/80 transition"
                       >
-                        admin / admin123
+                        👑 admin@webguard.project
                       </button>
                     </div>
 
