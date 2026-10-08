@@ -109,7 +109,9 @@ export function CopilotDrawer() {
             attackType: context.attackType,
             severity: context.severity,
             ruleId: context.ruleId,
-            matched: context.matched,
+            payload: context.payload,
+            threatScore: context.threatScore,
+            path: context.path,
           },
         }),
       });
