@@ -20,7 +20,11 @@ import {
   ArrowRight,
   CheckCircle2,
   Crosshair,
+  Eye,
+  EyeOff,
+  Key,
   Loader2,
+  Lock,
   Mail,
   ScanSearch,
   ShieldCheck,
@@ -73,6 +77,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     redirectAfterAuth,
   );
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
+  const [email, setEmail] = useState("admin@webguard.internal");
+  const [password, setPassword] = useState("admin123");
+  const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,16 +91,16 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   }, [authLoading, isAuthenticated, postSignIn, navigate, redirect]);
 
-  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleCredentialsSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsLoading(true);
     setError(null);
     try {
-      await signIn("admin");
+      await signIn("credentials", { email, username: email.split("@")[0] || email, password });
       setPostSignIn(true);
     } catch (error) {
       console.error("Sign-in error:", error);
-      setError("Failed to sign in. Please try again.");
+      setError("Failed to sign in. Please check your credentials.");
       setIsLoading(false);
     }
   };
@@ -231,58 +238,116 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
           <Card className="border-border/60 bg-card/90 shadow-[0_30px_80px_-30px_rgba(1,6,18,0.6)] backdrop-blur">
             {step === "signIn" ? (
               <>
-                <CardHeader className="text-center">
+                <CardHeader className="text-center pb-3">
                   <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-emerald-400 shadow-[0_0_24px_rgba(34,211,238,0.3)]">
                     <ShieldCheck className="size-6 text-[#04121c]" />
                   </div>
-                  <CardTitle className="mt-3 text-xl">Welcome to WebGuard</CardTitle>
-                  <CardDescription>
-                    Enter your email to log in or sign up
+                  <CardTitle className="mt-3 text-xl font-bold">Welcome to WebGuard</CardTitle>
+                  <CardDescription className="text-xs">
+                    Sign in to access AI WAF Security Operations Center
                   </CardDescription>
                 </CardHeader>
-                <form onSubmit={handleEmailSubmit}>
-                  <CardContent>
-                    <div className="relative flex items-center gap-2">
-                      <div className="relative flex-1">
-                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <form onSubmit={handleCredentialsSubmit}>
+                  <CardContent className="space-y-4">
+                    {/* Email / Username */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-foreground">
+                        Email or Username
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                         <Input
                           name="email"
-                          placeholder="name@example.com"
-                          type="email"
-                          className="pl-9"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="admin@webguard.internal"
+                          type="text"
+                          className="pl-9 h-10 text-xs font-medium"
                           disabled={isLoading}
                           required
                         />
                       </div>
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        size="icon"
-                        disabled={isLoading}
-                      >
-                        {isLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <ArrowRight className="h-4 w-4" />
-                        )}
-                      </Button>
                     </div>
-                    {error && <p className="mt-2 text-sm text-wg-rose">{error}</p>}
 
-                    <div className="mt-4">
+                    {/* Password */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold text-foreground">
+                          Password
+                        </label>
+                        <span className="text-[10px] text-muted-foreground font-medium">Default: admin123</span>
+                      </div>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                          name="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          type={showPassword ? "text" : "password"}
+                          className="pl-9 pr-10 h-10 text-xs font-medium"
+                          disabled={isLoading}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition"
+                          tabIndex={-1}
+                        >
+                          {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {error && <p className="text-xs font-medium text-wg-rose">{error}</p>}
+
+                    {/* Submit Button */}
+                    <Button
+                      type="submit"
+                      className="w-full h-10 gap-2 font-bold text-xs bg-primary text-primary-foreground hover:bg-primary/90 shadow-md transition"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" /> Signing In...
+                        </>
+                      ) : (
+                        <>
+                          <Key className="size-3.5" /> Sign In to Dashboard <ArrowRight className="size-3.5" />
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Quick Demo Credentials */}
+                    <div className="flex items-center justify-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
+                      <span>Demo Account:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmail("admin@webguard.internal");
+                          setPassword("admin123");
+                        }}
+                        className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold text-foreground hover:bg-muted/80 transition"
+                      >
+                        admin / admin123
+                      </button>
+                    </div>
+
+                    <div className="pt-2">
                       <div className="relative">
                         <div className="absolute inset-0 flex items-center">
-                          <span className="w-full border-t" />
+                          <span className="w-full border-t border-border/60" />
                         </div>
                         <div className="relative flex justify-center text-xs uppercase">
-                          <span className="bg-card px-2 text-muted-foreground">Or</span>
+                          <span className="bg-card px-2 text-muted-foreground text-[10px] font-semibold">Or</span>
                         </div>
                       </div>
 
                       <Button
                         type="button"
                         variant="outline"
-                        className="mt-4 w-full gap-2"
+                        className="mt-3 w-full h-9 gap-2 text-xs font-semibold"
                         onClick={handleGuestLogin}
                         disabled={isLoading}
                       >
