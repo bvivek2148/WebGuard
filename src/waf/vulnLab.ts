@@ -636,29 +636,36 @@ export interface LabAttackResult {
 
 /** Determine if a payload would match a specific vulnerability */
 function payloadMatchesVuln(payload: string, vulnId: VulnId): boolean {
-  const p = payload.toLowerCase();
+  let decoded = payload;
+  try {
+    decoded = decodeURIComponent(payload);
+  } catch {
+    // ignore malformed URI components
+  }
+  const p = (payload + " " + decoded).toLowerCase();
+
   switch (vulnId) {
     case "sqli-login":
     case "sqli-search":
     case "sqli-api":
-      return /union|select|or\s+1\s*=\s*1|'\s*or\s*'|--|;\s*drop|extractvalue|sleep\(/i.test(p);
+      return /['"\/;\-\*]|union|select|insert|update|delete|drop|or\s+1|or\s+'.*'=|--|\/\*|\*\/|extractvalue|sleep|concat|benchmark|load_file/i.test(p);
     case "reflected-xss":
     case "stored-xss":
-      return /<script|onerror|onload|javascript:|<img|<svg|<iframe|document\.cookie|document\.domain/i.test(p);
+      return /<script|<img|<svg|<iframe|<body|<style|javascript:|onerror|onload|onclick|onmouseover|eval\(|alert\(|document\.cookie|document\.domain|fetch\(/i.test(p);
     case "brute-force":
       return /password=|pass=|pwd=/i.test(p);
     case "email-injection":
-      return /%0d%0a|%0a|bcc:|cc:|subject:/i.test(p);
+      return /%0d%0a|%0a|%0d|bcc:|cc:|subject:/i.test(p);
     case "open-redirect":
-      return /redirect|callback|return_to|return_url|next=/i.test(p);
+      return /redirect|callback|return_to|return_url|next=|https?:\/\//i.test(p);
     case "idor":
-      return /id=\d+/i.test(p);
+      return /order_id=\d+|id=\d+|user_id=\d+|\/orders\/\d+|\/api\/users\/\d+/i.test(p);
     case "ssrf":
-      return /169\.254|127\.0\.0\.1|localhost|callback|internal/i.test(p);
+      return /169\.254|127\.0\.0\.1|localhost|0\.0\.0\.0|internal|metadata|callback=http|url=http/i.test(p);
     case "cmdi":
-      return /;|`|\|.*\||\$\(.*\)|cat\s|whoami|id$|bash/i.test(p);
+      return /;|`|\||\$\(|whoami|cat\s|dir|type\s|powershell|cmd|bash|sh\s|echo\s|net\s+user|nc\s|curl/i.test(p);
     case "path-traversal":
-      return /\.\.\//.test(p) || /%2e%2e/i.test(p);
+      return /\.\.\/|\.\.\\|%2e%2e|etc\/passwd|win\.ini|boot\.ini/i.test(p);
     case "jwt-forge":
       return /eyJ.*ey.*\./.test(p);
     case "csrf":
