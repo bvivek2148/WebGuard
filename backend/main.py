@@ -9,7 +9,9 @@ from collections import deque, defaultdict
 from contextlib import asynccontextmanager
 from typing import Dict, List, Set, Optional
 
-# Ensure stdout handles UTF-8 on Windows PowerShell
+# Ensure stdout handles UTF-8 and ANSI escape codes on Windows
+if os.name == 'nt':
+    os.system('')
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 

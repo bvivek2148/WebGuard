@@ -1,9 +1,12 @@
+import os
 import sys
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 import uvicorn
 
-# Ensure stdout handles UTF-8 on Windows PowerShell
+# Ensure stdout handles UTF-8 and ANSI escape codes on Windows
+if os.name == 'nt':
+    os.system('')
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
