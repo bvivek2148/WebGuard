@@ -423,7 +423,8 @@ class AuditScanRequest(BaseModel):
 @app.post("/api/auth/login")
 def login(body: LoginRequest):
     uname = (body.username or body.email or "").strip()
-    if (uname in ["admin@webguard.project", "admin", "admin@webguard.internal"] and body.password in ["WebGuard@Major_Project_B38", "admin123"]):
+    # 1. Master SuperAdmin verification
+    if (uname.lower() in ["admin@webguard.project", "admin", "admin@webguard.internal"] and body.password in ["WebGuard@Major_Project_B38", "admin123"]):
         token = f"token-admin-b38-{int(time.time()*1000)}"
         return {
             "status": "success",
@@ -433,21 +434,38 @@ def login(body: LoginRequest):
                 "username": "admin@webguard.project",
                 "email": "admin@webguard.project",
                 "role": "SuperAdmin (Full Access)",
+                "isSuperAdmin": True,
                 "permissions": ["all", "waf_control", "audit", "rules", "soc_lead", "admin_vault"]
             }
         }
 
-    user = database.authenticate_user(uname, body.password)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
-    token = f"token-{user['username']}-{int(time.time()*1000)}"
+    # 2. Check if user exists in database
+    db_user = database.authenticate_user(uname, body.password)
+    if db_user:
+        token = f"token-{db_user['username']}-{int(time.time()*1000)}"
+        return {
+            "status": "success",
+            "token": token,
+            "user": {
+                **db_user,
+                "email": f"{db_user['username']}@webguard.project" if "@" not in db_user['username'] else db_user['username'],
+                "isSuperAdmin": "SuperAdmin" in db_user.get("role", ""),
+                "permissions": ["all"] if "SuperAdmin" in db_user.get("role", "") else ["overview", "traffic", "audit", "sandbox"]
+            }
+        }
+
+    # 3. Allow open onboarding for any credentials as Guest / Analyst
+    token = f"token-guest-{int(time.time()*1000)}"
     return {
         "status": "success",
         "token": token,
         "user": {
-            **user,
-            "email": f"{user['username']}@webguard.project" if "@" not in user['username'] else user['username'],
-            "permissions": ["all", "waf_control", "audit", "rules", "soc_lead", "admin_vault"]
+            "id": int(time.time()),
+            "username": uname if uname else "Guest User",
+            "email": uname if "@" in uname else f"{uname}@user.local",
+            "role": "Guest / Analyst (Limited View)",
+            "isSuperAdmin": False,
+            "permissions": ["overview", "traffic", "audit", "sandbox"]
         }
     }
 
