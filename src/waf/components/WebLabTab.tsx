@@ -98,7 +98,6 @@ export type SitePage =
   | "cart"
   | "login"
   | "dashboard"
-  | "settings"
   | "docs"
   | "contact"
   | "diagnostics"
@@ -843,12 +842,6 @@ export function WebLabTab({
     return cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   }, [cart]);
 
-  const totalReqs = logs.filter((l) => l.type === "request").length;
-  const blockedReqs = logs.filter((l) => l.type === "waf").length;
-  const exploitedReqs = logs.filter(
-    (l) => l.type === "response" && l.vulnId && l.vulnId !== "custom"
-  ).length;
-
   const urlPath =
     currentPage === "home"
       ? "/"
@@ -870,97 +863,13 @@ export function WebLabTab({
 
   return (
     <div className="flex flex-col gap-4 text-slate-800">
-      {/* Top Banner: Master WAF Defense Controller */}
-      <div
-        className={cn(
-          "flex flex-wrap items-center justify-between gap-4 rounded-2xl border-2 px-5 py-3.5 transition-all duration-300 shadow-sm",
-          activeWaf
-            ? "border-emerald-500/40 bg-emerald-50/80 text-emerald-950"
-            : "border-red-500/40 bg-red-50/80 text-red-950"
-        )}
-      >
-        <div className="flex items-center gap-3.5">
-          <div
-            className={cn(
-              "flex size-11 items-center justify-center rounded-xl font-bold shadow-sm transition-colors",
-              activeWaf
-                ? "bg-emerald-500 text-white"
-                : "bg-red-500 text-white"
-            )}
-          >
-            {activeWaf ? <ShieldCheck className="size-6" /> : <ShieldOff className="size-6" />}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <p className={cn("text-sm md:text-base font-extrabold tracking-tight", activeWaf ? "text-emerald-900" : "text-red-900")}>
-                {activeWaf ? "🛡️ WebGuard WAF: ACTIVE (Blocking Exploits)" : "⚠️ WebGuard WAF: DISABLED (Exploit Mode)"}
-              </p>
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-sm",
-                  activeWaf ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
-                )}
-              >
-                {activeWaf ? "Protected" : "Unshielded"}
-              </span>
-            </div>
-            <p className="text-xs text-slate-600 mt-0.5 font-medium">
-              {activeWaf
-                ? "Edge inspection is ON. SQLi, XSS, IDOR, CMDi, and SSRF attacks will be intercepted with 403 Forbidden."
-                : "Firewall is OFF. Exploits will execute directly against the simulated application."}
-            </p>
-          </div>
-        </div>
-
-        {/* WAF Toggle & Live Stats */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs shadow-sm">
-            <div className="text-center">
-              <p className="font-mono font-bold text-slate-900">{totalReqs}</p>
-              <p className="text-[9px] text-slate-500 uppercase font-semibold">Total Reqs</p>
-            </div>
-            <div className="h-6 w-px bg-slate-200" />
-            <div className="text-center">
-              <p className="font-mono font-bold text-emerald-600">{blockedReqs}</p>
-              <p className="text-[9px] text-slate-500 uppercase font-semibold">Blocked</p>
-            </div>
-            <div className="h-6 w-px bg-slate-200" />
-            <div className="text-center">
-              <p className="font-mono font-bold text-red-600">{exploitedReqs}</p>
-              <p className="text-[9px] text-slate-500 uppercase font-semibold">Exploited</p>
-            </div>
-          </div>
-
-          <Button
-            size="sm"
-            onClick={() => setInternalWafOn((v) => !v)}
-            className={cn(
-              "gap-2 font-bold text-xs h-9 px-4 rounded-xl transition-all shadow-sm",
-              activeWaf
-                ? "bg-red-600 text-white hover:bg-red-700"
-                : "bg-emerald-600 text-white hover:bg-emerald-700"
-            )}
-          >
-            {activeWaf ? (
-              <>
-                <ShieldOff className="size-4" /> Turn WAF OFF (Test Exploits)
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="size-4" /> Turn WAF ON (Protect Site)
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* Main Sandbox Grid */}
+      {/* Main Sandbox Grid (Top Banner Removed for Clean Streamlined Design) */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         {/* ═══════════════════════════════════════════════════════════════════
             LEFT: Interactive Simulated Website (Light-Themed Browser Frame)
         ════════════════════════════════════════════════════════════════════ */}
         <div className="xl:col-span-7 flex flex-col gap-3">
-          <div className="overflow-hidden p-0 shadow-md rounded-2xl border border-slate-200 bg-white text-slate-900">
+          <div className="overflow-hidden p-0 shadow-sm rounded-2xl border border-slate-200 bg-white text-slate-900">
             {/* Browser Window Chrome */}
             <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-100/90 px-4 py-2.5">
               <div className="flex items-center gap-1.5">
@@ -992,23 +901,26 @@ export function WebLabTab({
                 </button>
               </div>
 
-              {/* URL Address Bar */}
+              {/* URL Address Bar with 1-Click WAF Toggle Pill */}
               <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-1.5 shadow-sm">
                 <Lock className={cn("size-3.5 shrink-0", activeWaf ? "text-emerald-600" : "text-amber-500")} />
                 <span className="flex-1 truncate font-mono text-xs text-slate-700">
                   https://apex-cyberstore.io<span className="text-cyan-600 font-bold">{urlPath}</span>
                 </span>
-                <span
+                <button
+                  type="button"
+                  onClick={() => setInternalWafOn((v) => !v)}
+                  title="Click to toggle WAF inspection mode"
                   className={cn(
-                    "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border",
+                    "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer",
                     activeWaf
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                      : "bg-red-50 text-red-700 border-red-300"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                      : "bg-red-50 text-red-700 border-red-300 hover:bg-red-100"
                   )}
                 >
                   {activeWaf ? <Shield className="size-2.5" /> : <ShieldOff className="size-2.5" />}
-                  {activeWaf ? "WAF PROXIED" : "UNPROTECTED"}
-                </span>
+                  {activeWaf ? "WAF PROXIED (CLICK TO DISABLE)" : "WAF OFF (CLICK TO ENABLE)"}
+                </button>
               </div>
             </div>
 
@@ -1119,7 +1031,7 @@ export function WebLabTab({
                       )}
                     >
                       <ShoppingCart className="size-3.5" />
-                      <span>Orders & Cart ({cart.length})</span>
+                      <span>Orders ({cart.length})</span>
                     </button>
 
                     {/* Admin Only Tools */}
@@ -1300,15 +1212,15 @@ export function WebLabTab({
                   {currentPage === "home" && (
                     <div className="space-y-6">
                       {/* Hero Section */}
-                      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-cyan-600 via-blue-600 to-indigo-700 p-7 text-white shadow-md">
+                      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-cyan-50 via-blue-50/60 to-indigo-50 border border-slate-200 p-7 shadow-sm">
                         <div className="relative z-10 max-w-lg space-y-3">
-                          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold text-white border border-white/30 backdrop-blur-sm">
+                          <div className="inline-flex items-center gap-1.5 rounded-full bg-cyan-100 text-cyan-800 px-3 py-1 text-[10px] font-bold border border-cyan-200">
                             🛡️ Next-Gen Zero-Trust Architecture & Threat Shield
                           </div>
-                          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white">
+                          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">
                             Apex Cloud & Security Platform
                           </h1>
-                          <p className="text-xs text-white/90 leading-relaxed font-medium">
+                          <p className="text-xs text-slate-600 leading-relaxed font-medium">
                             Protecting enterprise cloud infrastructure with military-grade hardware authenticators,
                             edge firewalls, and AI-driven SOC telemetry.
                           </p>
@@ -1317,7 +1229,7 @@ export function WebLabTab({
                             <Button
                               size="sm"
                               onClick={() => navigateTo("products")}
-                              className="h-9 gap-1.5 text-xs font-bold rounded-xl bg-white text-cyan-900 hover:bg-slate-100 shadow-sm"
+                              className="h-9 gap-1.5 text-xs font-bold rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 shadow-sm"
                             >
                               Explore Product Catalog →
                             </Button>
@@ -1326,16 +1238,16 @@ export function WebLabTab({
                                 size="sm"
                                 variant="outline"
                                 onClick={() => navigateTo("login")}
-                                className="h-9 gap-1.5 text-xs font-bold rounded-xl border-white/40 bg-white/10 text-white hover:bg-white/20"
+                                className="h-9 gap-1.5 text-xs font-bold rounded-xl border-slate-300 bg-white text-slate-800 hover:bg-slate-100"
                               >
-                                <Key className="size-3.5" /> Sign In to Portal
+                                <Key className="size-3.5 text-cyan-600" /> Sign In to Portal
                               </Button>
                             ) : (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => navigateTo("dashboard")}
-                                className="h-9 gap-1.5 text-xs font-bold rounded-xl border-white/40 bg-white/10 text-white hover:bg-white/20"
+                                className="h-9 gap-1.5 text-xs font-bold rounded-xl border-cyan-300 bg-white text-cyan-800 hover:bg-cyan-50"
                               >
                                 <LayoutDashboard className="size-3.5" /> Open My Dashboard
                               </Button>
@@ -2167,9 +2079,9 @@ export function WebLabTab({
 
                       {/* Server Output Console */}
                       {(pingOutput || traversalOutput || webhookOutput) && (
-                        <div className="rounded-2xl border border-slate-300 bg-slate-900 p-4 font-mono text-xs space-y-2 text-white shadow-md">
-                          <div className="flex justify-between items-center border-b border-slate-700 pb-1.5">
-                            <span className="text-cyan-400 font-bold flex items-center gap-1.5">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4 font-mono text-xs space-y-2 text-slate-900 shadow-sm">
+                          <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                            <span className="text-cyan-700 font-bold flex items-center gap-1.5">
                               <Terminal className="size-3.5" /> Backend Server Output
                             </span>
                             <button
@@ -2179,14 +2091,14 @@ export function WebLabTab({
                                 setTraversalOutput(null);
                                 setWebhookOutput(null);
                               }}
-                              className="text-slate-400 hover:text-white text-[10px]"
+                              className="text-slate-400 hover:text-slate-900 text-[10px]"
                             >
                               Clear
                             </button>
                           </div>
-                          {pingOutput && <pre className="text-emerald-400 whitespace-pre-wrap">{pingOutput}</pre>}
-                          {traversalOutput && <pre className="text-cyan-300 whitespace-pre-wrap">{traversalOutput}</pre>}
-                          {webhookOutput && <pre className="text-amber-300 whitespace-pre-wrap">{webhookOutput}</pre>}
+                          {pingOutput && <pre className="text-emerald-700 whitespace-pre-wrap font-semibold">{pingOutput}</pre>}
+                          {traversalOutput && <pre className="text-cyan-800 whitespace-pre-wrap font-semibold">{traversalOutput}</pre>}
+                          {webhookOutput && <pre className="text-amber-800 whitespace-pre-wrap font-semibold">{webhookOutput}</pre>}
                         </div>
                       )}
                     </div>
@@ -2270,7 +2182,7 @@ export function WebLabTab({
                             isXss ? "stored-xss" : isCrlf ? "email-injection" : undefined
                           );
                         }}
-                        className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3.5 shadow-md"
+                        className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3.5 shadow-sm"
                       >
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -2403,7 +2315,7 @@ export function WebLabTab({
 
           {/* Tab 1: Live Traffic Log */}
           {responseTab === "visual" && (
-            <div className="flex min-h-[500px] max-h-[680px] flex-col overflow-hidden p-0 rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-md">
+            <div className="flex min-h-[500px] max-h-[680px] flex-col overflow-hidden p-0 rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
                 <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                   <Globe2 className="size-4 text-cyan-600" /> Intercepted HTTP Exchanges ({logs.length / 2})
@@ -2468,7 +2380,7 @@ export function WebLabTab({
                       </div>
 
                       {log.body && (
-                        <pre className="max-h-20 overflow-x-auto rounded bg-slate-900 p-2 font-mono text-[10px] text-slate-100 whitespace-pre-wrap">
+                        <pre className="max-h-20 overflow-x-auto rounded bg-slate-100 p-2 font-mono text-[10px] text-slate-800 whitespace-pre-wrap border border-slate-200 font-medium">
                           {log.body}
                         </pre>
                       )}
@@ -2498,47 +2410,47 @@ export function WebLabTab({
 
           {/* Tab 2: Raw HTTP Terminal Stream */}
           {responseTab === "http" && (
-            <div className="flex min-h-[500px] max-h-[680px] flex-col overflow-hidden p-0 rounded-2xl border border-slate-300 bg-slate-900 text-slate-100 shadow-md">
-              <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950 px-4 py-2.5">
-                <span className="text-xs font-mono font-bold text-cyan-400 flex items-center gap-1.5">
+            <div className="flex min-h-[500px] max-h-[680px] flex-col overflow-hidden p-0 rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+                <span className="text-xs font-mono font-bold text-cyan-700 flex items-center gap-1.5">
                   <Terminal className="size-3.5" /> Socket Stream Inspector
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono">HTTP/1.1 Edge</span>
+                <span className="text-[10px] text-slate-500 font-mono">HTTP/1.1 Edge</span>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-relaxed text-slate-300 space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-relaxed text-slate-800 space-y-4">
                 {logs.length === 0 ? (
-                  <span className="text-slate-500"># No packets logged yet.</span>
+                  <span className="text-slate-400"># No packets logged yet.</span>
                 ) : (
                   logs.map((log) => (
-                    <div key={log.id} className="border-b border-slate-800 pb-3">
-                      <p className="text-[9px] text-slate-500 mb-1">
+                    <div key={log.id} className="border-b border-slate-100 pb-3">
+                      <p className="text-[9px] text-slate-400 mb-1 font-semibold">
                         ─── {new Date(log.ts).toLocaleTimeString()} ───
                       </p>
                       {log.type === "request" && (
                         <>
-                          <p className="text-cyan-400 font-bold">
+                          <p className="text-cyan-700 font-bold">
                             → {log.method} {log.path} HTTP/1.1
                           </p>
-                          <p className="text-slate-400">Host: apex-cyberstore.io</p>
-                          <p className="text-slate-400">User-Agent: Mozilla/5.0 (Windows NT 10.0)</p>
-                          {log.body && <p className="text-emerald-400 mt-1 font-semibold">{log.body}</p>}
+                          <p className="text-slate-500">Host: apex-cyberstore.io</p>
+                          <p className="text-slate-500">User-Agent: Mozilla/5.0 (Windows NT 10.0)</p>
+                          {log.body && <p className="text-emerald-700 mt-1 font-semibold bg-slate-50 p-1.5 rounded border border-slate-200">{log.body}</p>}
                         </>
                       )}
                       {log.type === "waf" && (
                         <>
-                          <p className="text-emerald-400 font-bold">← HTTP/1.1 403 Forbidden (WAF Intercept)</p>
-                          <p className="text-slate-400">X-WebGuard-Rule: {log.vulnId?.toUpperCase()}</p>
-                          <p className="text-slate-400">X-WebGuard-Action: BLOCKED_AT_EDGE</p>
-                          <p className="text-emerald-300 mt-1">{log.body?.slice(0, 160)}...</p>
+                          <p className="text-emerald-700 font-bold">← HTTP/1.1 403 Forbidden (WAF Intercept)</p>
+                          <p className="text-slate-500">X-WebGuard-Rule: {log.vulnId?.toUpperCase()}</p>
+                          <p className="text-slate-500">X-WebGuard-Action: BLOCKED_AT_EDGE</p>
+                          <p className="text-emerald-800 mt-1 bg-emerald-50 p-1.5 rounded border border-emerald-200 font-medium">{log.body?.slice(0, 160)}...</p>
                         </>
                       )}
                       {log.type === "response" && (
                         <>
-                          <p className="text-red-400 font-bold">← HTTP/1.1 {log.status} OK (Backend Response)</p>
-                          <p className="text-slate-400">Server: Uvicorn/FastAPI (Port 8080)</p>
-                          <p className="text-slate-400">Content-Type: application/json</p>
-                          <p className="text-red-300 mt-1">{log.body?.slice(0, 160)}...</p>
+                          <p className="text-red-700 font-bold">← HTTP/1.1 {log.status} OK (Backend Response)</p>
+                          <p className="text-slate-500">Server: Uvicorn/FastAPI (Port 8080)</p>
+                          <p className="text-slate-500">Content-Type: application/json</p>
+                          <p className="text-red-800 mt-1 bg-red-50 p-1.5 rounded border border-red-200 font-medium">{log.body?.slice(0, 160)}...</p>
                         </>
                       )}
                     </div>
@@ -2550,7 +2462,7 @@ export function WebLabTab({
 
           {/* Tab 3: OWASP Attack Triage */}
           {responseTab === "analysis" && (
-            <div className="flex min-h-[500px] max-h-[680px] flex-col overflow-hidden p-4 rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-md space-y-4">
+            <div className="flex min-h-[500px] max-h-[680px] flex-col overflow-hidden p-4 rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                 <Bug className="size-4 text-red-600" /> OWASP Threat Classification & Virtual Patch
               </h3>
