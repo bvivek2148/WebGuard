@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useWaf } from "../engine";
@@ -144,6 +144,49 @@ export function SocSidebar({
     return 0;
   };
 
+  const visibleNavGroups = useMemo(() => {
+    if (user?.isSuperAdmin) {
+      return NAV_GROUPS;
+    }
+    // Filtered essential view for Guest / Analyst:
+    return [
+      {
+        title: "Monitoring",
+        items: [
+          { id: "overview", label: "Overview", icon: Radar },
+          { id: "traffic", label: "Live Traffic", icon: Activity },
+        ],
+      },
+      {
+        title: "Security",
+        items: [
+          { id: "findings", label: "Findings & Vulnerabilities", icon: FileWarning },
+          { id: "canaries", label: "Canary Tokens", icon: Bomb },
+          { id: "audit", label: "Vulnerability Audit", icon: ScanSearch },
+          { id: "sandbox", label: "Request Sandbox", icon: FlaskConical },
+        ],
+      },
+      {
+        title: "Response",
+        items: [
+          { id: "alerts", label: "Alerts", icon: BellRing },
+        ],
+      },
+      {
+        title: "Defense",
+        items: [
+          { id: "access", label: "IP Blocklist & Rules", icon: Ban },
+        ],
+      },
+      {
+        title: "Automate",
+        items: [
+          { id: "integrations", label: "Integrations & Webhooks", icon: Webhook },
+        ],
+      },
+    ];
+  }, [user?.isSuperAdmin]);
+
   return (
     <>
       {open && (
@@ -188,7 +231,7 @@ export function SocSidebar({
 
         {/* nav */}
         <nav className="flex-1 overflow-y-auto py-4" style={{ paddingLeft: Math.round(sidebarWidth * 0.04), paddingRight: Math.round(sidebarWidth * 0.04) }}>
-          {NAV_GROUPS.map((group) => (
+          {visibleNavGroups.map((group) => (
             <div key={group.title} className="mb-5">
               <p className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/70" style={{ paddingLeft: Math.round(sidebarWidth * 0.02), paddingRight: Math.round(sidebarWidth * 0.02) }}>
                 {group.title}
