@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useWaf } from "../engine";
@@ -131,6 +131,25 @@ export function SocSidebar({
   const openFindings = state.findings.filter((f) => f.status === "open").length;
   const activeBans = state.blocklist.filter((b) => b.active).length;
 
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+
+  // Filter navigation items for non-admin users
+  const filteredNavGroups = NAV_GROUPS.map((group) => {
+    const visibleItems = group.items.filter((item) => {
+      if (!isSuperAdmin) {
+        // Non-admin cannot see findings, canaries, or integrations
+        if (item.id === "findings" || item.id === "canaries" || item.id === "integrations") {
+          return false;
+        }
+      }
+      return true;
+    });
+    return {
+      ...group,
+      items: visibleItems,
+    };
+  }).filter((group) => group.items.length > 0);
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
@@ -143,47 +162,6 @@ export function SocSidebar({
     if (id === "access") return activeBans;
     return 0;
   };
-
-  const visibleNavGroups = useMemo(() => {
-    if (user?.isSuperAdmin) {
-      return NAV_GROUPS;
-    }
-    // Filtered essential view for Guest / Analyst:
-    return [
-      {
-        title: "Monitoring",
-        items: [
-          { id: "overview", label: "Overview", icon: Radar },
-          { id: "traffic", label: "Live Traffic", icon: Activity },
-        ],
-      },
-      {
-        title: "Security",
-        items: [
-          { id: "findings", label: "Findings & Vulnerabilities", icon: FileWarning },
-          { id: "canaries", label: "Canary Tokens", icon: Bomb },
-        ],
-      },
-      {
-        title: "Response",
-        items: [
-          { id: "alerts", label: "Alerts", icon: BellRing },
-        ],
-      },
-      {
-        title: "Defense",
-        items: [
-          { id: "access", label: "IP Blocklist & Rules", icon: Ban },
-        ],
-      },
-      {
-        title: "Automate",
-        items: [
-          { id: "integrations", label: "Integrations & Webhooks", icon: Webhook },
-        ],
-      },
-    ];
-  }, [user?.isSuperAdmin]);
 
   return (
     <>
@@ -229,7 +207,7 @@ export function SocSidebar({
 
         {/* nav */}
         <nav className="flex-1 overflow-y-auto py-4" style={{ paddingLeft: Math.round(sidebarWidth * 0.04), paddingRight: Math.round(sidebarWidth * 0.04) }}>
-          {visibleNavGroups.map((group) => (
+          {filteredNavGroups.map((group) => (
             <div key={group.title} className="mb-5">
               <p className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/70" style={{ paddingLeft: Math.round(sidebarWidth * 0.02), paddingRight: Math.round(sidebarWidth * 0.02) }}>
                 {group.title}

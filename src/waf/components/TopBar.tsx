@@ -122,14 +122,15 @@ export function TopBar({
 
   const handleReset = () => {
     const ok = window.confirm(
-      "Reset all WebGuard demo data?\n\nMode, blocklist, custom rules, findings, incidents, alerts and integrations return to the seeded baseline. This cannot be undone.",
+      "Reset all WebGuard data?\n\nMode, blocklist, custom rules, findings, incidents, alerts and integrations return to the seeded baseline. This cannot be undone.",
     );
     if (!ok) return;
     clearSavedState();
     dispatch({ type: "RESET_STATE" });
-    toast.info("Demo state reset to baseline");
+    toast.info("State reset to baseline");
   };
 
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const sessionLabel = fmtDuration(now - state.sessionStartedAt);
 
   // Live drill progress for the top-bar ring indicator.
@@ -181,18 +182,11 @@ export function TopBar({
               <button
                 key={mode}
                 type="button"
-                title={user?.isSuperAdmin ? label : `${label} (View Only — SuperAdmin required to toggle)`}
-                onClick={() => {
-                  if (!user?.isSuperAdmin) {
-                    toast.info("View-Only Mode: Log in as SuperAdmin to change WAF enforcement policies.");
-                    return;
-                  }
-                  dispatch({ type: "SET_MODE", mode });
-                }}
+                title={label}
+                onClick={() => dispatch({ type: "SET_MODE", mode })}
                 className={cn(
                   "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-bold tracking-wider transition-all",
                   on ? active : idle,
-                  !user?.isSuperAdmin && !on && "opacity-60 cursor-default",
                 )}
               >
                 <Icon className="size-3.5" />
@@ -364,12 +358,12 @@ export function TopBar({
                       <span
                         className={cn(
                           "rounded border px-1.5 py-px text-[9px] font-bold tracking-wider",
-                          user?.isSuperAdmin
+                          isSuperAdmin
                             ? "border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald"
-                            : "border-wg-cyan/40 bg-wg-cyan/10 text-wg-cyan"
+                            : "border-primary/40 bg-primary/10 text-primary"
                         )}
                       >
-                        {user?.isSuperAdmin ? "ROLE · SUPERADMIN" : "ROLE · GUEST ANALYST (VIEW ONLY)"}
+                        {isSuperAdmin ? "ROLE · SUPERADMIN" : "ROLE · GUEST / ANALYST"}
                       </span>
                       <span className="flex items-center gap-1 rounded border border-border/50 bg-muted/60 px-1.5 py-px text-[9px] font-semibold text-muted-foreground">
                         <Timer className="size-2.5" /> shift {sessionLabel}
@@ -379,85 +373,94 @@ export function TopBar({
                 </div>
               </div>
 
-              {/* live console stats (SuperAdmin view) */}
-              {user?.isSuperAdmin && (
-                <div className="grid grid-cols-2 gap-px bg-border/40">
-                  <ProfileStat label="Active threats" value={activeThreats} tone={activeThreats > 0 ? "text-wg-rose" : "text-wg-emerald"} icon={<Siren className="size-3" />} />
-                  <ProfileStat label="Open findings" value={state.findings.filter((f) => f.status === "open" || f.status === "investigating").length} tone="text-wg-amber" icon={<ShieldOff className="size-3" />} />
-                  <ProfileStat label="Active bans" value={state.blocklist.filter((b) => b.active).length} tone="text-wg-rose" icon={<ShieldCheck className="size-3" />} />
-                  <ProfileStat label="Incidents" value={state.incidents.filter((i) => i.stage !== "resolved").length} tone="text-wg-cyan" icon={<Clock4 className="size-3" />} />
+              {/* live console stats */}
+              <div className="grid grid-cols-2 gap-px bg-border/40">
+                <ProfileStat label="Active threats" value={activeThreats} tone={activeThreats > 0 ? "text-wg-rose" : "text-wg-emerald"} icon={<Siren className="size-3" />} />
+                <ProfileStat label="Open findings" value={state.findings.filter((f) => f.status === "open" || f.status === "investigating").length} tone="text-wg-amber" icon={<ShieldOff className="size-3" />} />
+                <ProfileStat label="Active bans" value={state.blocklist.filter((b) => b.active).length} tone="text-wg-rose" icon={<ShieldCheck className="size-3" />} />
+                <ProfileStat label="Incidents" value={state.incidents.filter((i) => i.stage !== "resolved").length} tone="text-wg-cyan" icon={<Clock4 className="size-3" />} />
+              </div>
+
+              {/* session activity mix (Admin Only) */}
+              {isSuperAdmin && (
+                <div className="border-b border-border/50 px-3 py-2.5">
+                  <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+                    Session activity · {fmtCompact(state.totalRequests)} requests
+                  </p>
+                  <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-border/40">
+                    <div className="h-full bg-wg-rose" style={{ width: `${blockedPct}%` }} title={`blocked ${blockedPct}%`} />
+                    <div className="h-full bg-wg-amber" style={{ width: `${Math.max(0, attackPct - blockedPct)}%` }} title={`attacks ${attackPct}%`} />
+                    <div className="h-full bg-wg-emerald" style={{ width: `${Math.max(0, 100 - attackPct)}%` }} title="benign" />
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-wg-rose" /> blocked {blockedPct}%</span>
+                    <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-wg-amber" /> attacks {attackPct}%</span>
+                    <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-wg-emerald" /> benign {100 - attackPct}%</span>
+                  </div>
                 </div>
               )}
 
-              {/* session activity mix */}
-              <div className="border-b border-border/50 px-3 py-2.5">
-                <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
-                  Session activity · {fmtCompact(state.totalRequests)} requests
-                </p>
-                <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-border/40">
-                  <div className="h-full bg-wg-rose" style={{ width: `${blockedPct}%` }} title={`blocked ${blockedPct}%`} />
-                  <div className="h-full bg-wg-amber" style={{ width: `${Math.max(0, attackPct - blockedPct)}%` }} title={`attacks ${attackPct}%`} />
-                  <div className="h-full bg-wg-emerald" style={{ width: `${Math.max(0, 100 - attackPct)}%` }} title="benign" />
-                </div>
-                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] text-muted-foreground">
-                  <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-wg-rose" /> blocked {blockedPct}%</span>
-                  <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-wg-amber" /> attacks {attackPct}%</span>
-                  <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-wg-emerald" /> benign {100 - attackPct}%</span>
-                </div>
-              </div>
+              {/* live console status — mode + latency + velocity at a glance (Admin Only) */}
+              {isSuperAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <div className="border-b border-border/50 px-3 py-2.5">
+                    <p className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
+                      Console status
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md border px-2 py-1 text-[9px] font-bold tracking-wider",
+                          state.mode === "blocking" && "border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald",
+                          state.mode === "detection" && "border-wg-amber/40 bg-wg-amber/10 text-wg-amber",
+                          state.mode === "off" && "border-wg-rose/40 bg-wg-rose/10 text-wg-rose",
+                        )}
+                      >
+                        {state.mode === "blocking" ? <ShieldCheck className="size-3" /> : state.mode === "detection" ? <Radar className="size-3" /> : <ShieldOff className="size-3" />}
+                        {state.mode.toUpperCase()}
+                      </span>
+                      <span className={cn("rounded-md border border-border/40 bg-muted/50 px-2 py-1 font-mono text-[9px]", avgLatency < 2.5 ? "text-wg-emerald" : "text-wg-amber")}>
+                        <Gauge className="mr-1 inline size-2.5" />
+                        {avgLatency.toFixed(2)} ms
+                      </span>
+                      <span className="rounded-md border border-border/40 bg-muted/50 px-2 py-1 font-mono text-[9px] text-wg-cyan">
+                        <Activity className="mr-1 inline size-2.5" />
+                        {currentRps} rps
+                      </span>
+                      <span className={cn("rounded-md border border-border/40 bg-muted/50 px-2 py-1 font-mono text-[9px]", activeThreats > 0 ? "text-wg-rose" : "text-wg-emerald")}>
+                        <Siren className="mr-1 inline size-2.5" />
+                        {activeThreats} threats
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
 
-              <DropdownMenuSeparator />
-              {/* live console status — mode + latency + velocity at a glance */}
-              <div className="border-b border-border/50 px-3 py-2.5">
-                <p className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
-                  Console status
-                </p>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-md border px-2 py-1 text-[9px] font-bold tracking-wider",
-                      state.mode === "blocking" && "border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald",
-                      state.mode === "detection" && "border-wg-amber/40 bg-wg-amber/10 text-wg-amber",
-                      state.mode === "off" && "border-wg-rose/40 bg-wg-rose/10 text-wg-rose",
-                    )}
+              {isSuperAdmin && (
+                <>
+                  <DropdownMenuItem onClick={onOpenPalette} className="gap-2 text-xs">
+                    <Search className="size-3.5" /> Open command palette
+                    <kbd className="ml-auto rounded border border-border/60 bg-muted/50 px-1 font-mono text-[9px]">⌘K</kbd>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/")} className="gap-2 text-xs">
+                    <Zap className="size-3.5" /> Back to site
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleExport}
+                    className="gap-2 text-xs"
                   >
-                    {state.mode === "blocking" ? <ShieldCheck className="size-3" /> : state.mode === "detection" ? <Radar className="size-3" /> : <ShieldOff className="size-3" />}
-                    {state.mode.toUpperCase()}
-                  </span>
-                  <span className={cn("rounded-md border border-border/40 bg-muted/50 px-2 py-1 font-mono text-[9px]", avgLatency < 2.5 ? "text-wg-emerald" : "text-wg-amber")}>
-                    <Gauge className="mr-1 inline size-2.5" />
-                    {avgLatency.toFixed(2)} ms
-                  </span>
-                  <span className="rounded-md border border-border/40 bg-muted/50 px-2 py-1 font-mono text-[9px] text-wg-cyan">
-                    <Activity className="mr-1 inline size-2.5" />
-                    {currentRps} rps
-                  </span>
-                  <span className={cn("rounded-md border border-border/40 bg-muted/50 px-2 py-1 font-mono text-[9px]", activeThreats > 0 ? "text-wg-rose" : "text-wg-emerald")}>
-                    <Siren className="mr-1 inline size-2.5" />
-                    {activeThreats} threats
-                  </span>
-                </div>
-              </div>
+                    <Download className="size-3.5" /> Export SOC data
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => importRef.current?.click()} className="gap-2 text-xs">
+                    <Upload className="size-3.5" /> Import SOC data
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <SavePoints />
+                  <DropdownMenuSeparator />
+                </>
+              )}
 
-              <DropdownMenuItem onClick={onOpenPalette} className="gap-2 text-xs">
-                <Search className="size-3.5" /> Open command palette
-                <kbd className="ml-auto rounded border border-border/60 bg-muted/50 px-1 font-mono text-[9px]">⌘K</kbd>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate("/")} className="gap-2 text-xs">
-                <Zap className="size-3.5" /> Back to site
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleExport}
-                className="gap-2 text-xs"
-              >
-                <Download className="size-3.5" /> Export SOC data
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => importRef.current?.click()} className="gap-2 text-xs">
-                <Upload className="size-3.5" /> Import SOC data
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <SavePoints />
-              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleReset} className="gap-2 text-xs">
                 <RotateCcw className="size-3.5" /> Reset data
               </DropdownMenuItem>

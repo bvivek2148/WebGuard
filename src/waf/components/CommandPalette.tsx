@@ -56,6 +56,7 @@ function pickRandomScenarioId(): string {
 import { SCENARIO_ICONS } from "./DrillsTab";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 interface NavCommand {
   id: string;
@@ -401,21 +402,33 @@ export function CommandPalette({
     toast.success("SOC data exported as JSON");
   };
 
+  const { user } = useAuth();
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+
   const resetDemo = () => {
     const ok = window.confirm(
-      "Reset all WebGuard demo data?\n\nMode, blocklist, custom rules, findings, incidents, alerts and integrations return to the seeded baseline. This cannot be undone.",
+      "Reset all WebGuard data?\n\nMode, blocklist, custom rules, findings, incidents, alerts and integrations return to the seeded baseline. This cannot be undone.",
     );
     if (!ok) return;
     pushRecent("session-reset");
     clearSavedState();
     dispatch({ type: "RESET_STATE" });
     onOpenChange(false);
-    toast.info("Demo state reset to baseline");
+    toast.info("State reset to baseline");
   };
+
+  const visibleNavCommands = NAV_COMMANDS.filter((c) => {
+    if (!isSuperAdmin) {
+      if (c.id === "findings" || c.id === "canaries" || c.id === "integrations") {
+        return false;
+      }
+    }
+    return true;
+  });
 
   // Lookup for rendering the Recent group from persisted ids
   const recentLookup: Record<string, { label: string; icon: LucideIcon }> = {};
-  for (const c of NAV_COMMANDS) recentLookup[`nav-${c.id}`] = { label: c.label, icon: c.icon };
+  for (const c of visibleNavCommands) recentLookup[`nav-${c.id}`] = { label: c.label, icon: c.icon };
   for (const c of FILTER_COMMANDS) recentLookup[`filter-${c.id}`] = { label: c.label, icon: c.icon };
   for (const c of MODE_COMMANDS) recentLookup[`mode-${c.id}`] = { label: c.label, icon: c.icon };
   recentLookup["copilot-posture"] = { label: "Analyze current SOC posture", icon: Sparkles };
@@ -433,9 +446,9 @@ export function CommandPalette({
     recentLookup[`drill-${s.id}`] = { label: `Run drill — ${s.name}`, icon: SCENARIO_ICONS[s.id] ?? Swords };
   }
   recentLookup["session-export"] = { label: "Export SOC data (JSON)", icon: Download };
-  recentLookup["session-reset"] = { label: "Reset demo data", icon: RotateCcw };
+  recentLookup["session-reset"] = { label: "Reset data", icon: RotateCcw };
 
-  const totalCommands = NAV_COMMANDS.length + FILTER_COMMANDS.length + MODE_COMMANDS.length + 4 + 7 + 2 + DRILL_SCENARIOS.length;
+  const totalCommands = visibleNavCommands.length + FILTER_COMMANDS.length + MODE_COMMANDS.length + 4 + 7 + 2 + DRILL_SCENARIOS.length;
   const recentItems = recents.map((id) => recentLookup[id]).filter(Boolean).slice(0, MAX_RECENT);
 
   return (
@@ -465,7 +478,7 @@ export function CommandPalette({
         )}
 
         <CommandGroup heading="Navigate">
-          {NAV_COMMANDS.map(({ id, label, keywords, icon: Icon }) => {
+          {visibleNavCommands.map(({ id, label, keywords, icon: Icon }) => {
             const badge = navBadge[id];
             return (
               <CommandItem key={id} keywords={keywords.split(" ")} onSelect={() => go(id)}>
@@ -599,9 +612,9 @@ export function CommandPalette({
             <Download />
             <span>Export SOC data (JSON)</span>
           </CommandItem>
-          <CommandItem keywords={["reset", "clear", "wipe", "fresh", "restart demo"]} onSelect={resetDemo}>
+          <CommandItem keywords={["reset", "clear", "wipe", "fresh", "restart"]} onSelect={resetDemo}>
             <RotateCcw />
-            <span>Reset demo data</span>
+            <span>Reset data</span>
           </CommandItem>
         </CommandGroup>
 

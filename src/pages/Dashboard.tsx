@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { WafProvider, useWaf } from "@/waf/engine";
+import { useAuth } from "@/hooks/use-auth";
 import { TopBar } from "@/waf/components/TopBar";
 import { SocSidebar } from "@/waf/components/SocSidebar";
 import { OverviewTab } from "@/waf/components/OverviewTab";
@@ -56,6 +57,16 @@ function SocShell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [trafficFilters, setTrafficFilters] = useState<TrafficFilters>(DEFAULT_TRAFFIC_FILTERS);
   const { state } = useWaf();
+  const { user } = useAuth();
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+
+  // If a non-admin is currently on a restricted tab, reset to overview
+  useEffect(() => {
+    if (!isSuperAdmin && (tab === "findings" || tab === "canaries" || tab === "integrations")) {
+      setTab("overview");
+    }
+  }, [isSuperAdmin, tab]);
+
   const isLgScreen = useMediaQuery("(min-width: 1024px)");
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     try {
@@ -67,7 +78,11 @@ function SocShell() {
   const now = useNow(1000);
 
   const navigate = (t: string) => {
-    setTab(t);
+    if (!isSuperAdmin && (t === "findings" || t === "canaries" || t === "integrations")) {
+      setTab("overview");
+    } else {
+      setTab(t);
+    }
     setSidebarOpen(false);
   };
 
@@ -87,12 +102,12 @@ function SocShell() {
           {tab === "health" && <HealthTab />}
           {tab === "alerts" && <AlertsTab />}
           {tab === "incidents" && <IncidentsTab />}
-          {tab === "canaries" && <CanariesTab />}
+          {tab === "canaries" && isSuperAdmin && <CanariesTab />}
           {tab === "sandbox" && <SandboxTab />}
-          {tab === "findings" && <FindingsTab onNavigate={navigate} />}
+          {tab === "findings" && isSuperAdmin && <FindingsTab onNavigate={navigate} />}
           {tab === "access" && <AccessTab />}
           {tab === "rules" && <RulesTab onNavigate={navigate} />}
-          {tab === "integrations" && <IntegrationsTab />}
+          {tab === "integrations" && isSuperAdmin && <IntegrationsTab />}
           {tab === "drills" && <DrillsTab onNavigate={navigate} />}
         </main>
 
