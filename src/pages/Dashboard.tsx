@@ -60,9 +60,11 @@ function SocShell() {
   const { user } = useAuth();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
 
+  const RESTRICTED_TABS = ["health", "findings", "canaries", "rules", "drills", "integrations"];
+
   // If a non-admin is currently on a restricted tab, reset to overview
   useEffect(() => {
-    if (!isSuperAdmin && (tab === "findings" || tab === "canaries" || tab === "integrations")) {
+    if (!isSuperAdmin && RESTRICTED_TABS.includes(tab)) {
       setTab("overview");
     }
   }, [isSuperAdmin, tab]);
@@ -78,7 +80,7 @@ function SocShell() {
   const now = useNow(1000);
 
   const navigate = (t: string) => {
-    if (!isSuperAdmin && (t === "findings" || t === "canaries" || t === "integrations")) {
+    if (!isSuperAdmin && RESTRICTED_TABS.includes(t)) {
       setTab("overview");
     } else {
       setTab(t);
@@ -93,22 +95,22 @@ function SocShell() {
       <div className="flex min-h-screen flex-col" style={{ paddingLeft: isLgScreen ? sidebarWidth : 0 }}>
         <TopBar onMenuClick={() => setSidebarOpen(true)} onOpenPalette={() => setPaletteOpen(true)} onNavigate={navigate} />
 
-        {state.drill && <DrillBanner now={now} onOpen={() => navigate("drills")} />}
+        {state.drill && isSuperAdmin && <DrillBanner now={now} onOpen={() => navigate("drills")} />}
 
         <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-4 lg:px-6">
           {tab === "overview" && <OverviewTab onNavigate={navigate} />}
           {tab === "audit" && <AuditTab onNavigate={navigate} />}
           {tab === "traffic" && <TrafficTab filters={trafficFilters} onFiltersChange={setTrafficFilters} />}
-          {tab === "health" && <HealthTab />}
+          {tab === "health" && isSuperAdmin && <HealthTab />}
           {tab === "alerts" && <AlertsTab />}
           {tab === "incidents" && <IncidentsTab />}
           {tab === "canaries" && isSuperAdmin && <CanariesTab />}
           {tab === "sandbox" && <SandboxTab />}
           {tab === "findings" && isSuperAdmin && <FindingsTab onNavigate={navigate} />}
           {tab === "access" && <AccessTab />}
-          {tab === "rules" && <RulesTab onNavigate={navigate} />}
+          {tab === "rules" && isSuperAdmin && <RulesTab onNavigate={navigate} />}
           {tab === "integrations" && isSuperAdmin && <IntegrationsTab />}
-          {tab === "drills" && <DrillsTab onNavigate={navigate} />}
+          {tab === "drills" && isSuperAdmin && <DrillsTab onNavigate={navigate} />}
         </main>
 
         <footer className="mx-auto flex w-full max-w-[1500px] flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 pb-6 pt-2 text-[10px] text-muted-foreground/70 lg:px-6">

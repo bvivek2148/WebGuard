@@ -419,7 +419,8 @@ export function CommandPalette({
 
   const visibleNavCommands = NAV_COMMANDS.filter((c) => {
     if (!isSuperAdmin) {
-      if (c.id === "findings" || c.id === "canaries" || c.id === "integrations") {
+      const nonAdminHidden = ["health", "findings", "canaries", "rules", "drills", "integrations"];
+      if (nonAdminHidden.includes(c.id)) {
         return false;
       }
     }

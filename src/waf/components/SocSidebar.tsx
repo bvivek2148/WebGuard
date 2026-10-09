@@ -137,8 +137,9 @@ export function SocSidebar({
   const filteredNavGroups = NAV_GROUPS.map((group) => {
     const visibleItems = group.items.filter((item) => {
       if (!isSuperAdmin) {
-        // Non-admin cannot see findings, canaries, or integrations
-        if (item.id === "findings" || item.id === "canaries" || item.id === "integrations") {
+        // Non-admin can only see essential sections
+        const nonAdminHidden = ["health", "findings", "canaries", "rules", "drills", "integrations"];
+        if (nonAdminHidden.includes(item.id)) {
           return false;
         }
       }
