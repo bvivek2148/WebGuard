@@ -122,12 +122,16 @@ export function TopBar({
 
   const handleReset = () => {
     const ok = window.confirm(
-      "Reset all WebGuard data?\n\nMode, blocklist, custom rules, findings, incidents, alerts and integrations return to the seeded baseline. This cannot be undone.",
+      "Reset all WebGuard data?\n\nThis will completely clear all local storage, session storage, audit history, findings, alarms, incidents, custom rules, and telemetry. This cannot be undone.",
     );
     if (!ok) return;
-    clearSavedState();
+    try {
+      clearSavedState();
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (e) {}
     dispatch({ type: "RESET_STATE" });
-    toast.info("State reset to baseline");
+    toast.success("All project data, storage, and telemetry successfully reset!");
   };
 
   const isSuperAdmin = Boolean(user?.isSuperAdmin);

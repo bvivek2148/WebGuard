@@ -97,7 +97,7 @@ function SocShell() {
 
         {state.drill && isSuperAdmin && <DrillBanner now={now} onOpen={() => navigate("drills")} />}
 
-        <main className="mx-auto w-full max-w-[1500px] flex-1 px-4 py-4 lg:px-6">
+        <main className="w-full flex-1 px-4 py-4 lg:px-6">
           {tab === "overview" && <OverviewTab onNavigate={navigate} />}
           {tab === "audit" && <AuditTab onNavigate={navigate} />}
           {tab === "traffic" && <TrafficTab filters={trafficFilters} onFiltersChange={setTrafficFilters} />}
@@ -113,7 +113,7 @@ function SocShell() {
           {tab === "drills" && isSuperAdmin && <DrillsTab onNavigate={navigate} />}
         </main>
 
-        <footer className="mx-auto flex w-full max-w-[1500px] flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 pb-6 pt-2 text-[10px] text-muted-foreground/70 lg:px-6">
+        <footer className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 pb-6 pt-2 text-[10px] text-muted-foreground/70 lg:px-6">
           <p className="flex items-center gap-1.5">
             <ShieldCheck className="size-3.5" />
             WebGuard SOC Console · Real-Time Edge Protection & Active Defense

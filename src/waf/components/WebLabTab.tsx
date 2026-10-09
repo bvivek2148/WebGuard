@@ -51,6 +51,7 @@ import {
   Filter,
   Flame,
   Globe2,
+  GripVertical,
   HardDrive,
   Home,
   Info,
@@ -61,7 +62,10 @@ import {
   Lock,
   LogOut,
   Mail,
+  Maximize2,
   MessageSquare,
+  Minimize2,
+  Monitor,
   Package,
   Play,
   Plus,
@@ -75,9 +79,11 @@ import {
   ShieldCheck,
   ShieldOff,
   ShoppingCart,
+  Smartphone,
   SlidersHorizontal,
   Sparkles,
   Star,
+  Tablet,
   Terminal,
   Trash2,
   TrendingUp,
@@ -123,7 +129,7 @@ interface SiteAlert {
 interface LogEntry {
   id: string;
   ts: number;
-  type: "request" | "response" | "waf" | "error";
+  type: "request" | "response" | "waf" | "error" | "exploit";
   method?: string;
   path?: string;
   status?: number;
@@ -593,17 +599,21 @@ export function WebLabTab({
   const [attackEffect, setAttackEffect] = useState<"exploit" | "blocked" | null>(null);
   const [responseTab, setResponseTab] = useState<"visual" | "http" | "analysis">("visual");
 
-  // Live Target URL Proxy & Exploit Runner State
+  // Live Target URL Proxy, Resizable Split & Studio State
   const [labMode, setLabMode] = useState<"app" | "live-target">("app");
   const [liveViewMode, setLiveViewMode] = useState<"viewport" | "exploit" | "split">("viewport");
   const [iframeKey, setIframeKey] = useState<number>(0);
-  const [targetUrlInput, setTargetUrlInput] = useState<string>(wafState.target || "http://localhost:8080");
+  const [targetUrlInput, setTargetUrlInput] = useState<string>(wafState.target || "");
   const [selectedPresetId, setSelectedPresetId] = useState<string>("sqli-login");
   const [customMethod, setCustomMethod] = useState<HttpMethod>("POST");
   const [customPath, setCustomPath] = useState<string>("/api/auth/login");
   const [customHeaders, setCustomHeaders] = useState<string>("Content-Type: application/x-www-form-urlencoded");
   const [customPayload, setCustomPayload] = useState<string>("username=admin' OR '1'='1' --&password=invalid_password");
   const [executingLive, setExecutingLive] = useState<boolean>(false);
+  const [splitWidth, setSplitWidth] = useState<number>(58); // 58% website frame, 42% traffic panel
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isMaximizedStudio, setIsMaximizedStudio] = useState<boolean>(false);
+  const [viewportPreset, setViewportPreset] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [liveTargetResponse, setLiveTargetResponse] = useState<{
     status: number;
     statusText: string;
@@ -626,12 +636,74 @@ export function WebLabTab({
     }
   }, [wafState.target]);
 
+  // Telemetry listener for real-time packets intercepted from target iframe
+  useEffect(() => {
+    const handleWindowMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === "WEBGARD_INTERCEPTED_TRAFFIC") {
+        const { method, url, status, body } = event.data;
+        const cleanPath = String(url || "").replace(/^https?:\/\/[^\/]+/, "") || "/";
+        const content = `${cleanPath} ${body || ""}`;
+        const isMalicious = /('|\%27)\s*([\-\-]|or|and|union|select)|<script|javascript:|onerror=|<img/i.test(content);
+        
+        const newLog: LogEntry = {
+          id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          ts: Date.now(),
+          type: status === 403 ? "waf" : isMalicious ? "exploit" : "request",
+          method: (method as HttpMethod) || "GET",
+          path: cleanPath,
+          status: status || (isMalicious && activeWaf ? 403 : 200),
+          body: body ? String(body) : undefined,
+          threatScore: status === 403 ? 96 : isMalicious ? 92 : 8,
+          vulnId: isMalicious ? "sqli-login" : undefined,
+        };
+        setLogs((prev) => [newLog, ...prev.slice(0, 49)]);
+      }
+    };
+    window.addEventListener("message", handleWindowMessage);
+    return () => window.removeEventListener("message", handleWindowMessage);
+  }, [activeWaf]);
+
+  // Resizable split divider drag handler
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      const containerId = isMaximizedStudio ? "studio-split-container" : "weblab-split-container";
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const newWidth = ((e.clientX - rect.left) / rect.width) * 100;
+      if (newWidth >= 25 && newWidth <= 80) {
+        setSplitWidth(Math.round(newWidth));
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging) setIsDragging(false);
+    };
+
+    if (isDragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging, isMaximizedStudio]);
+
+  const handleStartDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
   const handleSelectPreset = (preset: LivePreset) => {
     setSelectedPresetId(preset.id);
     setCustomMethod(preset.method);
     setCustomPath(preset.path);
     setCustomHeaders(preset.headers);
     setCustomPayload(preset.payload);
+  };
+
   const proxiedIframeSrc = useMemo(() => {
     if (!targetUrlInput) return "";
     let normalized = targetUrlInput.trim();
@@ -964,11 +1036,6 @@ export function WebLabTab({
     [templateId, enabledVulns, activeWaf, dispatch]
   );
 
-  // Auto-scroll logs
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
-
   // Handler: Search in store or docs
   const handleStoreSearch = (query: string) => {
     setSearchQuery(query);
@@ -1264,13 +1331,19 @@ export function WebLabTab({
 
   return (
     <div className="flex flex-col gap-4 text-slate-800">
-      {/* Main Sandbox Grid (Top Banner Removed for Clean Streamlined Design) */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+      {/* Main Sandbox Split View with Live Draggable Divider */}
+      <div
+        id="weblab-split-container"
+        className="flex flex-col lg:flex-row gap-0 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden min-h-[640px]"
+      >
         {/* ═══════════════════════════════════════════════════════════════════
-            LEFT: Interactive Simulated Website (Light-Themed Browser Frame)
+            LEFT: Interactive Simulated Website / Live Target Viewport
         ════════════════════════════════════════════════════════════════════ */}
-        <div className="xl:col-span-7 flex flex-col gap-3">
-          <div className="overflow-hidden p-0 shadow-sm rounded-2xl border border-slate-200 bg-white text-slate-900">
+        <div
+          style={{ width: `${splitWidth}%` }}
+          className="flex flex-col min-w-[320px] transition-[width] duration-75 border-b lg:border-b-0 lg:border-r border-slate-200 overflow-hidden"
+        >
+          <div className="overflow-hidden p-0 bg-white text-slate-900 flex-1 flex flex-col">
             {/* Top Frame Mode Switcher Bar */}
             <div className="flex flex-wrap items-center justify-between border-b border-slate-200 bg-slate-200/80 px-4 py-1.5 gap-2 text-xs">
               <div className="flex items-center gap-1.5">
@@ -1289,7 +1362,10 @@ export function WebLabTab({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLabMode("live-target")}
+                  onClick={() => {
+                    setLabMode("live-target");
+                    setIsMaximizedStudio(true);
+                  }}
                   className={cn(
                     "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer",
                     labMode === "live-target"
@@ -1338,6 +1414,7 @@ export function WebLabTab({
                       setNavigating(true);
                       setTimeout(() => setNavigating(false), 120);
                     } else {
+                      setIframeKey((k) => k + 1);
                       handleExecuteLiveProbe();
                     }
                   }}
@@ -1367,7 +1444,7 @@ export function WebLabTab({
                     )}
                   >
                     {activeWaf ? <Shield className="size-2.5" /> : <ShieldOff className="size-2.5" />}
-                    {activeWaf ? "WAF PROXIED (CLICK TO DISABLE)" : "WAF OFF (CLICK TO ENABLE)"}
+                    {activeWaf ? "WAF PROXIED" : "WAF OFF"}
                   </button>
                 </div>
               ) : (
@@ -1379,20 +1456,48 @@ export function WebLabTab({
                     placeholder="https://target.example.com or http://localhost:8080"
                     className="h-7 flex-1 border-0 bg-transparent px-1 font-mono text-xs text-slate-800 shadow-none focus-visible:ring-0"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setInternalWafOn((v) => !v)}
-                    title="Click to toggle WAF inspection mode"
-                    className={cn(
-                      "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer",
-                      activeWaf
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
-                        : "bg-red-50 text-red-700 border-red-300 hover:bg-red-100"
-                    )}
-                  >
-                    {activeWaf ? <Shield className="size-2.5" /> : <ShieldOff className="size-2.5" />}
-                    {activeWaf ? "WAF PROXIED (CLICK TO DISABLE)" : "WAF OFF (CLICK TO ENABLE)"}
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIframeKey((k) => k + 1)}
+                      title="Reload Target Frame"
+                      className="rounded p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition cursor-pointer"
+                    >
+                      <RefreshCw className="size-3" />
+                    </button>
+                    <a
+                      href={proxiedIframeSrc}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Open in Standalone Browser Window"
+                      className="rounded p-1 text-slate-500 hover:text-cyan-700 hover:bg-slate-200 transition cursor-pointer"
+                    >
+                      <ExternalLink className="size-3" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setIsMaximizedStudio(true)}
+                      title="Open in Fullscreen Studio Workspace"
+                      className="flex items-center gap-1 rounded bg-cyan-600 hover:bg-cyan-700 text-white px-2 py-0.5 text-[10px] font-bold shadow-sm transition cursor-pointer"
+                    >
+                      <Maximize2 className="size-2.5" />
+                      <span>Studio</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInternalWafOn((v) => !v)}
+                      title="Click to toggle WAF inspection mode"
+                      className={cn(
+                        "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer",
+                        activeWaf
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                          : "bg-red-50 text-red-700 border-red-300 hover:bg-red-100"
+                      )}
+                    >
+                      {activeWaf ? <Shield className="size-2.5" /> : <ShieldOff className="size-2.5" />}
+                      {activeWaf ? "WAF PROXIED" : "WAF OFF"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1503,13 +1608,13 @@ export function WebLabTab({
                     VIEWPORT / SPLIT MODE: Live Embedded Iframe
                 ════════════════════════════════════════════════════════════════ */}
                 {(liveViewMode === "viewport" || liveViewMode === "split") && (
-                  <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm space-y-0">
+                  <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm space-y-0">
                     {/* Viewport Header Bar */}
-                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs">
+                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/80 px-3 py-2 text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="flex size-2.5 rounded-full bg-emerald-500" />
-                        <span className="font-mono text-[11px] font-bold text-slate-800 truncate max-w-sm">
-                          {targetUrlInput.startsWith("http") ? targetUrlInput : `http://${targetUrlInput}`}
+                        <span className={cn("flex size-2.5 rounded-full", targetUrlInput.trim() ? "bg-emerald-500" : "bg-amber-500")} />
+                        <span className="font-mono text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate max-w-sm">
+                          {targetUrlInput.trim() ? (targetUrlInput.startsWith("http") ? targetUrlInput : `http://${targetUrlInput}`) : "No Target Configured"}
                         </span>
                       </div>
 
@@ -1517,27 +1622,74 @@ export function WebLabTab({
                         <button
                           type="button"
                           onClick={() => setIframeKey((k) => k + 1)}
-                          className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-200 transition"
+                          className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
                           title="Reload live page in iframe"
                         >
                           <RefreshCw className="size-3" />
-                          <span>Reload Frame</span>
+                          <span>Reload</span>
+                        </button>
+                        {targetUrlInput.trim() && (
+                          <a
+                            href={proxiedIframeSrc}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                            title="Open Proxied Target in New Tab"
+                          >
+                            <ExternalLink className="size-3" />
+                            <span>Popout</span>
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsMaximizedStudio(true)}
+                          className="flex items-center gap-1 rounded bg-cyan-600 hover:bg-cyan-700 text-white px-2 py-1 text-[10px] font-bold shadow-sm transition cursor-pointer"
+                          title="Open Fullscreen Studio Workspace"
+                        >
+                          <Maximize2 className="size-3" />
+                          <span>Full Studio</span>
                         </button>
                       </div>
                     </div>
 
-                    {/* The Live Iframe */}
-                    <div className="relative w-full min-h-[380px] bg-slate-50">
-                      <iframe
-                        key={iframeKey}
-                        src={proxiedIframeSrc}
-                        title="Live Target Website"
-                        className="w-full h-[460px] border-0 bg-white"
-                        sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
-                      />
+                    {/* The Live Iframe or Empty State */}
+                    <div className="relative w-full min-h-[500px] bg-slate-50 dark:bg-slate-950">
+                      {!targetUrlInput.trim() ? (
+                        <div className="flex flex-col items-center justify-center h-[520px] w-full py-16 px-6 text-center space-y-3 bg-slate-50 dark:bg-slate-900/50">
+                          <div className="flex size-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-sm">
+                            <Globe2 className="size-6" />
+                          </div>
+                          <div className="space-y-1 max-w-md">
+                            <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                              No Target Application Configured
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Enter a target URL in the field above or click a preset to start live WAF proxy inspection and security probing.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setTargetUrlInput("http://localhost:8080")}
+                              className="text-xs font-mono border-slate-300 dark:border-slate-700"
+                            >
+                              Use http://localhost:8080
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <iframe
+                          key={iframeKey}
+                          src={proxiedIframeSrc}
+                          title="Live Target Website"
+                          className="w-full h-[580px] border-0 bg-white"
+                          sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+                        />
+                      )}
 
                       {/* Floating In-Viewport Exploit Injection Strip */}
-                      <div className="border-t border-slate-200 bg-slate-900/95 backdrop-blur-sm p-3 text-white space-y-2">
+                      <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-900/95 backdrop-blur-sm p-3 text-white space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
                             <Zap className="size-3 text-yellow-400" />
@@ -3193,10 +3345,22 @@ export function WebLabTab({
           </div>
         </div>
 
+        {/* DRAGGABLE RESIZE DIVIDER */}
+        <div
+          onMouseDown={handleStartDrag}
+          className="hidden lg:flex w-2.5 bg-slate-100 hover:bg-cyan-500 cursor-col-resize items-center justify-center border-x border-slate-200 transition-colors group select-none shrink-0"
+          title="Click and drag left or right to resize website frame vs live traffic panel"
+        >
+          <GripVertical className="size-3 text-slate-400 group-hover:text-white" />
+        </div>
+
         {/* ═══════════════════════════════════════════════════════════════════
             RIGHT: Live Traffic, Raw Terminal & Threat Analysis Panel
         ════════════════════════════════════════════════════════════════════ */}
-        <div className="xl:col-span-5 flex flex-col gap-3">
+        <div
+          style={{ width: `calc(${100 - splitWidth}% - 10px)` }}
+          className="flex flex-col min-w-[300px] p-3 gap-3 bg-slate-50/60 transition-[width] duration-75 overflow-hidden flex-1"
+        >
           {/* Tab Selector */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
@@ -3464,6 +3628,340 @@ export function WebLabTab({
           )}
         </div>
       </div>
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          FULLSCREEN DEDICATED STUDIO WORKSPACE MODAL (LIGHT & DARK THEME SUPPORT)
+      ══════════════════════════════════════════════════════════════════════ */}
+      {isMaximizedStudio && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/80 dark:bg-slate-950/95 backdrop-blur-md p-2 sm:p-4 text-slate-900 dark:text-slate-100 animate-in fade-in duration-200">
+          {/* Studio Top Navigation Bar */}
+          <div className="flex flex-wrap items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-2xl px-4 py-2.5 gap-3 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-cyan-600 text-white font-black shadow-sm">
+                <Globe2 className="size-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-black tracking-wide text-slate-900 dark:text-white">
+                    Live Target Exploiter & SOC Studio
+                  </h2>
+                  <Badge className={cn("text-[9px] font-mono", activeWaf ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
+                    {activeWaf ? "WAF SHIELD ACTIVE (403 BLOCK)" : "WAF OFF (RAW ORIGIN)"}
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-md">
+                  {targetUrlInput || "No Target URL Configured"}
+                </p>
+              </div>
+            </div>
+
+            {/* Studio Interactive Target URL Bar */}
+            <div className="flex items-center gap-1.5 flex-1 max-w-sm mx-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-2 py-1 shadow-inner">
+              <Globe2 className="size-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+              <Input
+                value={targetUrlInput}
+                onChange={(e) => setTargetUrlInput(e.target.value)}
+                placeholder="Enter target URL (e.g. http://localhost:8080)"
+                className="h-6 flex-1 border-0 bg-transparent p-0 text-xs font-mono text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus-visible:ring-0 shadow-none"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Viewport Device Presets */}
+              <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/90 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setViewportPreset("desktop")}
+                  className={cn(
+                    "px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition cursor-pointer",
+                    viewportPreset === "desktop" ? "bg-cyan-600 text-white shadow-sm" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  )}
+                  title="Desktop View (Full Width)"
+                >
+                  <Monitor className="size-3.5" /> Desktop
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewportPreset("tablet")}
+                  className={cn(
+                    "px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition cursor-pointer",
+                    viewportPreset === "tablet" ? "bg-cyan-600 text-white shadow-sm" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  )}
+                  title="Tablet View (768px)"
+                >
+                  <Tablet className="size-3.5" /> Tablet
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewportPreset("mobile")}
+                  className={cn(
+                    "px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition cursor-pointer",
+                    viewportPreset === "mobile" ? "bg-cyan-600 text-white shadow-sm" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                  )}
+                  title="Mobile View (390px)"
+                >
+                  <Smartphone className="size-3.5" /> Mobile
+                </button>
+              </div>
+
+              {/* WAF Switch Button */}
+              <button
+                type="button"
+                onClick={() => setInternalWafOn((v) => !v)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition shadow-sm cursor-pointer",
+                  activeWaf
+                    ? "bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-700"
+                    : "bg-red-600 text-white border-red-500 hover:bg-red-700"
+                )}
+              >
+                {activeWaf ? <ShieldCheck className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
+                <span>{activeWaf ? "WAF Protected" : "WAF Disabled"}</span>
+              </button>
+
+              {/* Reload */}
+              <button
+                type="button"
+                onClick={() => setIframeKey((k) => k + 1)}
+                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                title="Reload Live Target Frame"
+              >
+                <RefreshCw className="size-4" />
+              </button>
+
+              {/* Popout in New Window */}
+              {targetUrlInput.trim() && (
+                <a
+                  href={proxiedIframeSrc}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                  title="Open Proxied Target in Standalone Browser Window"
+                >
+                  <ExternalLink className="size-4" />
+                </a>
+              )}
+
+              {/* Close Studio */}
+              <button
+                type="button"
+                onClick={() => setIsMaximizedStudio(false)}
+                className="rounded-xl border border-rose-500/40 bg-rose-600 hover:bg-rose-700 p-2 text-white font-bold transition cursor-pointer shadow-sm"
+                title="Exit Full Studio Workspace"
+              >
+                <Minimize2 className="size-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Studio Resizable Workspace Body */}
+          <div
+            id="studio-split-container"
+            className="flex-1 flex flex-col lg:flex-row border-x border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 rounded-b-2xl overflow-hidden min-h-0"
+          >
+            {/* Studio Left: Target Viewport */}
+            <div
+              style={{ width: `${splitWidth}%` }}
+              className="flex flex-col min-w-[300px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 min-h-0 overflow-hidden"
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-100/90 dark:bg-slate-900/90 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-2">
+                  <span className={cn("size-2 rounded-full", targetUrlInput.trim() ? "bg-emerald-500 animate-pulse" : "bg-amber-500")} />
+                  <span className="font-mono text-[11px] truncate text-slate-800 dark:text-slate-200 font-semibold">
+                    {targetUrlInput.trim() || "No Target Configured"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-cyan-600 dark:text-cyan-400 font-mono">
+                  <span>Width: {splitWidth}%</span>
+                  <span>·</span>
+                  <span>Proxy Route: {targetUrlInput.trim() ? "Active" : "Idle"}</span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-auto flex items-center justify-center p-3 bg-slate-100 dark:bg-slate-950">
+                <div
+                  className={cn(
+                    "h-full w-full bg-white dark:bg-slate-900 rounded-xl overflow-hidden transition-all shadow-xl border border-slate-200 dark:border-slate-800",
+                    viewportPreset === "tablet" ? "max-w-[768px]" : viewportPreset === "mobile" ? "max-w-[390px]" : "w-full"
+                  )}
+                >
+                  {!targetUrlInput.trim() ? (
+                    <div className="flex flex-col items-center justify-center h-full w-full py-20 px-6 text-center space-y-3 bg-slate-50 dark:bg-slate-900/50">
+                      <div className="flex size-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-sm">
+                        <Globe2 className="size-7" />
+                      </div>
+                      <div className="space-y-1 max-w-md">
+                        <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                          Enter Target URL to Start Live Inspection
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Type any target web application or API endpoint in the input bar at the top to browse and exploit it in real time through WebGuard.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setTargetUrlInput("http://localhost:8080")}
+                          className="text-xs font-mono border-slate-300 dark:border-slate-700"
+                        >
+                          Use http://localhost:8080
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <iframe
+                      key={`studio-${iframeKey}`}
+                      src={proxiedIframeSrc}
+                      title="Studio Live Target Website"
+                      className="w-full h-full border-0 bg-white"
+                      sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Quick Exploit Injector Bar in Studio */}
+              <div className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/95 p-2.5 text-slate-900 dark:text-white flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-cyan-700 dark:text-cyan-400">
+                  <Zap className="size-3 text-yellow-500" />
+                  <span>Quick Test Payloads:</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {LIVE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        handleSelectPreset(preset);
+                        setTimeout(() => handleExecuteLiveProbe(), 50);
+                      }}
+                      className="rounded border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-800 dark:text-slate-200 hover:border-cyan-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center gap-1 cursor-pointer shadow-xs"
+                    >
+                      <span className="text-[8px] text-cyan-600 dark:text-cyan-300 uppercase font-mono">{preset.category}</span>
+                      <span>{preset.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Studio Draggable Resizer Bar */}
+            <div
+              onMouseDown={handleStartDrag}
+              className="hidden lg:flex w-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-cyan-500 cursor-col-resize items-center justify-center border-x border-slate-300 dark:border-slate-700 transition-colors group select-none shrink-0"
+              title="Drag left or right to resize Studio panes"
+            >
+              <GripVertical className="size-3.5 text-slate-400 dark:text-slate-500 group-hover:text-white" />
+            </div>
+
+            {/* Studio Right: Live Traffic & Threat Telemetry */}
+            <div
+              style={{ width: `calc(${100 - splitWidth}% - 10px)` }}
+              className="flex flex-col min-w-[320px] p-3 gap-2.5 bg-white dark:bg-slate-900 min-h-0 overflow-hidden flex-1"
+            >
+              {/* Studio Telemetry Tab Selector */}
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <div className="flex items-center gap-1">
+                  {[
+                    { id: "visual" as const, label: "Live Traffic", icon: <Globe2 className="size-3.5" /> },
+                    { id: "http" as const, label: "HTTP Socket Stream", icon: <Terminal className="size-3.5" /> },
+                    { id: "analysis" as const, label: "OWASP Matrix", icon: <Bug className="size-3.5" /> },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setResponseTab(t.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition shadow-sm cursor-pointer",
+                        responseTab === t.id
+                          ? "border-cyan-600 bg-cyan-600 text-white"
+                          : "border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700"
+                      )}
+                    >
+                      {t.icon} {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+                  onClick={() => {
+                    setLogs([]);
+                    setLastResult(null);
+                  }}
+                >
+                  <RefreshCw className="size-3 mr-1" /> Clear Stream
+                </Button>
+              </div>
+
+              {/* Studio Live Logs */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 font-mono text-xs">
+                {logs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center gap-2">
+                    <Globe2 className="size-10 text-slate-400 dark:text-slate-700" />
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Streaming Live Target Traffic...</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-600 max-w-xs">
+                      Interact with the target website on the left or click any test payload to see packet inspection.
+                    </p>
+                  </div>
+                ) : (
+                  logs.map((log) => (
+                    <div
+                      key={log.id}
+                      className={cn(
+                        "rounded-lg border p-2.5 text-xs space-y-1.5 transition shadow-sm",
+                        log.type === "waf"
+                          ? "border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
+                          : log.type === "exploit"
+                          ? "border-red-500/50 bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 text-slate-800 dark:text-slate-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.2 text-[8px] font-black uppercase",
+                            log.type === "waf"
+                              ? "bg-emerald-600 text-white"
+                              : log.type === "exploit"
+                              ? "bg-red-600 text-white"
+                              : "bg-cyan-600 text-white"
+                          )}
+                        >
+                          {log.type === "waf" ? "🛡️ 403 BLOCKED" : log.type === "exploit" ? "⚠️ EXPLOITED" : "→ PROXIED"}
+                        </span>
+                        <span className="font-bold text-slate-900 dark:text-white">{log.method || "GET"}</span>
+                        <span className="truncate text-slate-500 dark:text-slate-400">{log.path || "/"}</span>
+                        {log.threatScore !== undefined && (
+                          <span
+                            className={cn(
+                              "ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded border",
+                              log.threatScore > 70
+                                ? "bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400 border-red-300 dark:border-red-800"
+                                : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800"
+                            )}
+                          >
+                            Score: {log.threatScore}/100
+                          </span>
+                        )}
+                      </div>
+
+                      {log.body && (
+                        <pre className="max-h-16 overflow-x-auto rounded bg-slate-100 dark:bg-slate-950 p-1.5 text-[10px] text-slate-800 dark:text-slate-300 font-mono border border-slate-200 dark:border-slate-850">
+                          {log.body}
+                        </pre>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
