@@ -6,13 +6,14 @@ import { ATTACK_LABELS } from "../types";
 import type { AttackType, SeriesPoint } from "../types";
 import { flagEmoji, fmtCompact, Kpi, SectionTitle, SeverityBadge, timeAgo, useNow } from "./shared";
 import { ThreatMap } from "./ThreatMap";
-import { Activity, Ban, BellRing, Clock, Crosshair, FileWarning, FlaskConical, Gauge, Pause, Play, ScanSearch, ShieldCheck, ShieldOff, ShieldAlert, Siren, Square, Swords, Zap } from "lucide-react";
+import { Activity, Ban, BellRing, Clock, Crosshair, FileWarning, FlaskConical, Gauge, History, Pause, Play, ScanSearch, ShieldCheck, ShieldOff, ShieldAlert, Siren, Square, Swords, Zap } from "lucide-react";
 import { drillScenarioById, scenarioTotalSec, stageIndexAt } from "../drills";
 import { SCENARIO_ICONS } from "./DrillsTab";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2 } from "lucide-react";
 import { SEVERITY_META } from "../types";
+import { TargetHistoryDialog } from "./TargetHistoryDialog";
 
 const SERIES_KEYS: { key: keyof SeriesPoint; label: string; color: string }[] = [
   { key: "rps", label: "Traffic", color: "#22d3ee" },
@@ -105,6 +106,7 @@ export function OverviewTab({ onNavigate }: { onNavigate: (tab: string) => void 
   const now = useNow(1000);
   const { findings } = state;
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const window30 = useMemo(
     () => state.logs.filter((l) => now - l.ts <= 30_000),
@@ -217,6 +219,7 @@ export function OverviewTab({ onNavigate }: { onNavigate: (tab: string) => void 
         <ActionChip icon={<Siren className="size-3.5" />} label={`Incidents (${state.incidents.filter((i) => i.stage === "investigating").length})`} onClick={() => onNavigate("incidents")} />
         <ActionChip icon={<Ban className="size-3.5" />} label={`Blocklist (${state.blocklist.filter((b) => b.active).length})`} onClick={() => onNavigate("access")} />
         <ActionChip icon={<Swords className="size-3.5" />} label="Vulnerability Lab" onClick={() => onNavigate("sandbox")} />
+        <ActionChip icon={<History className="size-3.5 text-cyan-600 dark:text-cyan-400" />} label="Target History" onClick={() => setHistoryOpen(true)} />
       </div>
 
       {/* live drill status — shown only while a campaign is actually running */}
@@ -616,6 +619,14 @@ export function OverviewTab({ onNavigate }: { onNavigate: (tab: string) => void 
           </div>
         </div>
       </div>
+      <TargetHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        onSelectTarget={(target) => {
+          dispatch({ type: "SET_TARGET", target });
+          onNavigate("sandbox");
+        }}
+      />
     </div>
   );
 }

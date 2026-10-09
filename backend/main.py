@@ -423,8 +423,8 @@ class AuditScanRequest(BaseModel):
 @app.post("/api/auth/login")
 def login(body: LoginRequest):
     uname = (body.username or body.email or "").strip()
-    # 1. Master SuperAdmin verification
-    if (uname.lower() in ["admin@webguard.project", "admin", "admin@webguard.internal"] and body.password in ["WebGuard@Major_Project_B38", "admin123"]):
+    # 1. Master SuperAdmin verification (Strict enforcement)
+    if uname.lower() == "admin@webguard.project" and body.password == "WebGuard@Major_Project_B38":
         token = f"token-admin-b38-{int(time.time()*1000)}"
         return {
             "status": "success",

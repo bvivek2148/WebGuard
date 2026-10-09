@@ -45,16 +45,16 @@ export function useAuth() {
   const signIn = async (method: string, data?: any) => {
     setIsLoading(true);
     try {
-      let username = "admin@webguard.project";
-      let password = "WebGuard@Major_Project_B38";
+      let emailOrUser = "";
+      let password = "";
 
       if (data && typeof data === "object") {
-        username = (data.username || data.email || "").trim();
-        password = data.password || "";
+        emailOrUser = (data.email || data.username || "").trim();
+        password = (data.password || "").trim();
       }
 
       // Guest / Anonymous login
-      if (method === "anonymous" || !username) {
+      if (method === "anonymous" || !emailOrUser) {
         const guestUser: UserProfile = {
           name: "Guest Visitor",
           email: "guest@webguard.local",
@@ -71,14 +71,14 @@ export function useAuth() {
         return;
       }
 
-      // Check if Master SuperAdmin
+      // Check if Master SuperAdmin: admin@webguard.project + WebGuard@Major_Project_B38
       const isMasterAdmin =
-        (username.toLowerCase() === "admin@webguard.project" || username.toLowerCase() === "admin") &&
+        (emailOrUser.toLowerCase() === "admin@webguard.project" || emailOrUser.toLowerCase() === "admin") &&
         (password === "WebGuard@Major_Project_B38" || password === "admin123");
 
       if (isMasterAdmin) {
         const adminUser: UserProfile = {
-          name: "Admin (Major Project B38)",
+          name: "SuperAdmin (Major Project B38)",
           email: "admin@webguard.project",
           role: "SuperAdmin (Full Access)",
           isSuperAdmin: true,
@@ -93,40 +93,22 @@ export function useAuth() {
         return;
       }
 
-      // Any other username / email & password: Allow login as standard Guest / Analyst
-      const displayName = username.includes("@") ? username.split("@")[0] : username;
-      const formattedEmail = username.includes("@") ? username : `${username}@user.local`;
-      const regularUser: UserProfile = {
-        name: displayName.charAt(0).toUpperCase() + displayName.slice(1),
+      // Any other user email & password: log in as Non-Admin Operator / Analyst
+      const namePart = emailOrUser.includes("@") ? emailOrUser.split("@")[0] : emailOrUser;
+      const displayName = namePart ? namePart.charAt(0).toUpperCase() + namePart.slice(1) : "Operator";
+      const formattedEmail = emailOrUser.includes("@") ? emailOrUser : `${emailOrUser}@webguard.local`;
+
+      const nonAdminUser: UserProfile = {
+        name: displayName,
         email: formattedEmail,
-        role: "Guest / Analyst (Limited View)",
+        role: "Analyst / Operator (Non-Admin)",
         isSuperAdmin: false,
         permissions: ["overview", "traffic", "audit", "sandbox"],
       };
 
+      setUser(nonAdminUser);
       try {
-        const resp = await fetch("http://localhost:8000/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        });
-        if (resp.ok) {
-          const res = await resp.json();
-          if (res.token) {
-            localStorage.setItem("webguard.token", res.token);
-          }
-          if (res.user) {
-            regularUser.role = res.user.role || regularUser.role;
-            regularUser.isSuperAdmin = res.user.role?.includes("SuperAdmin") || false;
-          }
-        }
-      } catch {
-        // Local fallback
-      }
-
-      setUser(regularUser);
-      try {
-        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(regularUser));
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nonAdminUser));
         localStorage.setItem(AUTH_STORAGE_KEY, "true");
       } catch { /* ignore */ }
       setIsAuthenticated(true);

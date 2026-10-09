@@ -17,15 +17,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Activity, BellRing, Clock4, Download, Gauge, Globe, LogOut, Menu, Radar, RotateCcw, Search, ShieldCheck, ShieldOff, Siren, Sparkles, Swords, Timer, Upload, Zap } from "lucide-react";
+import { Activity, BellRing, Clock4, Download, Gauge, Globe, History, LogOut, Menu, Radar, RotateCcw, Search, ShieldCheck, ShieldOff, Siren, Sparkles, Swords, Timer, Upload, Zap } from "lucide-react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { clearSavedState, persistSnapshot, serializePersistedState } from "../engine";
 import type { PersistedState } from "../engine";
 import { flagEmoji, fmtCompact, fmtDuration, useNow } from "./shared";
 import { scenarioMeta } from "./DrillsTab";
 import { SavePoints } from "./SavePoints";
+import { TargetHistoryDialog } from "./TargetHistoryDialog";
 
 const MODES: { mode: WafMode; label: string; short: string; icon: typeof ShieldOff; active: string; idle: string }[] = [
   {
@@ -136,6 +137,7 @@ export function TopBar({
 
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const sessionLabel = fmtDuration(now - state.sessionStartedAt);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Live drill progress for the top-bar ring indicator.
   const drillMeta = state.drill ? scenarioMeta(state.drill.scenarioId) : null;
@@ -180,28 +182,28 @@ export function TopBar({
         <div className="flex flex-wrap items-center gap-2 lg:basis-full lg:gap-x-3 2xl:basis-auto">
           {/* mode controller */}
           <div className="flex shrink-0 items-center gap-1 rounded-xl border border-border/70 bg-muted/40 p-1">
-          {MODES.map(({ mode, short, label, icon: Icon, active, idle }) => {
-            const on = state.mode === mode;
-            return (
-              <button
-                key={mode}
-                type="button"
-                title={label}
-                onClick={() => dispatch({ type: "SET_MODE", mode })}
-                className={cn(
-                  "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-bold tracking-wider transition-all",
-                  on ? active : idle,
-                )}
-              >
-                <Icon className="size-3.5" />
-                <span className="hidden md:inline">{short}</span>
-              </button>
-            );
-          })}
-        </div>
+            {MODES.map(({ mode, short, label, icon: Icon, active, idle }) => {
+              const on = state.mode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  title={label}
+                  onClick={() => dispatch({ type: "SET_MODE", mode })}
+                  className={cn(
+                    "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-bold tracking-wider transition-all cursor-pointer",
+                    on ? active : idle,
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                  <span className="hidden md:inline">{short}</span>
+                </button>
+              );
+            })}
+          </div>
 
-        {/* indicators + actions */}
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2 lg:gap-2.5">
+          {/* indicators + actions */}
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2 lg:gap-2.5">
           <Popover>
             <PopoverTrigger asChild>
               <button type="button" title="Inspect ingress latency — click for details" className="group">
@@ -441,6 +443,20 @@ export function TopBar({
                 </>
               )}
 
+              <div className="p-1">
+                <DropdownMenuItem
+                  onClick={() => setHistoryOpen(true)}
+                  className="gap-2 text-xs font-semibold cursor-pointer text-foreground hover:text-cyan-500 transition-colors"
+                >
+                  <History className="size-3.5 text-cyan-500" />
+                  <span>Target History & Exploit Logs</span>
+                  <span className="ml-auto rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-[9px] px-1.5 py-0.5 font-mono font-bold">
+                    HISTORY
+                  </span>
+                </DropdownMenuItem>
+              </div>
+              <DropdownMenuSeparator />
+
               {isSuperAdmin && (
                 <>
                   <DropdownMenuItem onClick={onOpenPalette} className="gap-2 text-xs">
@@ -494,6 +510,14 @@ export function TopBar({
         </div>
         </div>
       </div>
+      <TargetHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        onSelectTarget={(target) => {
+          dispatch({ type: "SET_TARGET", target });
+          onNavigate?.("sandbox");
+        }}
+      />
     </header>
   );
 }

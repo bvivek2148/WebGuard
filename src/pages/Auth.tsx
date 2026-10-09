@@ -77,8 +77,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     redirectAfterAuth,
   );
   const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
-  const [email, setEmail] = useState("admin@webguard.project");
-  const [password, setPassword] = useState("WebGuard@Major_Project_B38");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -96,7 +96,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setIsLoading(true);
     setError(null);
     try {
-      await signIn("credentials", { email, username: email.split("@")[0] || email, password });
+      await signIn("credentials", { email: email.trim(), username: email.trim(), password: password.trim() });
       setPostSignIn(true);
     } catch (error) {
       console.error("Sign-in error:", error);
@@ -260,7 +260,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           name="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          placeholder="admin@webguard.project"
+                          placeholder="Enter your email or username"
                           type="text"
                           className="pl-9 h-10 text-xs font-medium"
                           disabled={isLoading}
@@ -275,7 +275,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         <label className="block text-xs font-semibold text-foreground">
                           Password
                         </label>
-                        <span className="text-[10px] text-muted-foreground font-medium">Major Project B38</span>
                       </div>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -283,7 +282,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           name="password"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••"
+                          placeholder="Enter your password"
                           type={showPassword ? "text" : "password"}
                           className="pl-9 pr-10 h-10 text-xs font-medium"
                           disabled={isLoading}
@@ -318,21 +317,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         </>
                       )}
                     </Button>
-
-                    {/* Quick Demo Credentials */}
-                    <div className="flex items-center justify-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
-                      <span>SuperAdmin:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEmail("admin@webguard.project");
-                          setPassword("WebGuard@Major_Project_B38");
-                        }}
-                        className="rounded bg-muted px-2 py-0.5 font-mono text-[10px] font-semibold text-foreground hover:bg-muted/80 transition"
-                      >
-                        👑 admin@webguard.project
-                      </button>
-                    </div>
 
                     <div className="pt-2">
                       <div className="relative">

@@ -248,7 +248,50 @@ function generateWafBlockHtml(detection: ThreatDetection, targetUrl: string, cli
 </html>`;
 }
 
-// Helper to execute request with automatic HTTP redirect following
+import zlib from "node:zlib";
+
+// Persistent Connection Pooling for ultra-low latency subresource fetching
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 100,
+  maxFreeSockets: 20,
+  timeout: 30000,
+});
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 100,
+  maxFreeSockets: 20,
+  timeout: 30000,
+  rejectUnauthorized: false, // allow testing local/staging self-signed targets
+});
+
+// Helper to decompress buffer based on content-encoding
+function decompressBuffer(buffer: Buffer, encoding?: string): Promise<Buffer> {
+  if (!buffer || buffer.length === 0 || !encoding) {
+    return Promise.resolve(buffer);
+  }
+  const enc = encoding.toLowerCase().trim();
+  return new Promise((resolve) => {
+    if (enc.includes("gzip") || enc.includes("x-gzip")) {
+      zlib.gunzip(buffer, (err, decompressed) => {
+        resolve(err ? buffer : decompressed);
+      });
+    } else if (enc.includes("deflate")) {
+      zlib.inflate(buffer, (err, decompressed) => {
+        resolve(err ? buffer : decompressed);
+      });
+    } else if (enc.includes("br")) {
+      zlib.brotliDecompress(buffer, (err, decompressed) => {
+        resolve(err ? buffer : decompressed);
+      });
+    } else {
+      resolve(buffer);
+    }
+  });
+}
+
+// Helper to execute request with automatic HTTP redirect following & connection reuse
 function executeProxyRequest(
   targetUrlObj: URL,
   method: string,
@@ -263,7 +306,8 @@ function executeProxyRequest(
 
     const clientHeaders = { ...headers };
     clientHeaders["Host"] = targetUrlObj.host;
-    delete clientHeaders["accept-encoding"]; // Avoid decompression issues
+    // Request compressed content for high throughput
+    clientHeaders["Accept-Encoding"] = "gzip, deflate, br";
 
     const req = clientModule.request(
       {
@@ -273,7 +317,8 @@ function executeProxyRequest(
         method,
         path,
         headers: clientHeaders,
-        timeout: 15000,
+        agent: isHttps ? httpsAgent : httpAgent,
+        timeout: 12000,
       },
       (res) => {
         const statusCode = res.statusCode || 200;
@@ -281,17 +326,25 @@ function executeProxyRequest(
         // Check for redirects (301, 302, 303, 307, 308)
         if ([301, 302, 303, 307, 308].includes(statusCode) && res.headers.location && maxRedirects > 0) {
           const redirectUrl = new URL(res.headers.location, targetUrlObj.href);
-          res.resume(); // consume response data to free memory
+          res.resume(); // consume response data to free socket back to pool
           return resolve(executeProxyRequest(redirectUrl, method, headers, bodyBuffer, maxRedirects - 1));
         }
 
         const chunks: Buffer[] = [];
         res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
+        res.on("end", async () => {
+          const rawBody = Buffer.concat(chunks);
+          const encoding = res.headers["content-encoding"] as string | undefined;
+          const decompressedBody = await decompressBuffer(rawBody, encoding);
+
+          // Return response with decompressed body and cleaned content-encoding
+          const cleanHeaders = { ...res.headers };
+          delete cleanHeaders["content-encoding"];
+
           resolve({
             statusCode,
-            headers: res.headers,
-            body: Buffer.concat(chunks),
+            headers: cleanHeaders,
+            body: decompressedBody,
             finalUrl: targetUrlObj,
           });
         });
@@ -301,7 +354,7 @@ function executeProxyRequest(
     req.on("error", (err) => reject(err));
     req.on("timeout", () => {
       req.destroy();
-      reject(new Error("Request to target origin timed out (15s)"));
+      reject(new Error("Request to target origin timed out"));
     });
 
     if (bodyBuffer.length > 0) {
@@ -430,18 +483,30 @@ export function webguardWafProxyPlugin(): Plugin {
 
           const contentType = String(proxyResult.headers["content-type"] || "");
 
-          // If response is HTML, inject base href and client bridge script
+          // If response is HTML, inject base href, rewrite root-relative assets and inject bridge script
           if (contentType.includes("text/html")) {
             let html = proxyResult.body.toString("utf-8");
             const finalOrigin = proxyResult.finalUrl.origin;
 
-            // Inject <base href="..."> so relative paths work
+            // 1. Force base tag so relative assets resolve directly to final target origin
             const baseTag = `<base href="${finalOrigin}/">`;
-            if (!html.includes("<base ")) {
-              html = html.replace(/<head>/i, `<head>\n  ${baseTag}`);
+            if (/<base\s+[^>]*>/i.test(html)) {
+              html = html.replace(/<base\s+[^>]*>/i, baseTag);
+            } else if (/<head[^>]*>/i.test(html)) {
+              html = html.replace(/(<head[^>]*>)/i, `$1\n  ${baseTag}`);
+            } else {
+              html = `${baseTag}\n${html}`;
             }
 
-            // In-frame bridge script to route fetch/XHR through WAF and post telemetry
+            // 2. Rewrite root-relative links, stylesheets, scripts, and images so they resolve directly to final origin
+            html = html
+              .replace(/(<link\b[^>]*?\bhref=["'])\/([^/][^"']*?["'])/gi, `$1${finalOrigin}/$2`)
+              .replace(/(<script\b[^>]*?\bsrc=["'])\/([^/][^"']*?["'])/gi, `$1${finalOrigin}/$2`)
+              .replace(/(<img\b[^>]*?\bsrc=["'])\/([^/][^"']*?["'])/gi, `$1${finalOrigin}/$2`)
+              .replace(/(<source\b[^>]*?\bsrc=["'])\/([^/][^"']*?["'])/gi, `$1${finalOrigin}/$2`)
+              .replace(/(<source\b[^>]*?\bsrcset=["'])\/([^/][^"']*?["'])/gi, `$1${finalOrigin}/$2`);
+
+            // 3. In-frame bridge script to route fetch/XHR through WAF and post telemetry
             const bridgeScript = `
 <script>
   (function() {
@@ -472,17 +537,19 @@ export function webguardWafProxyPlugin(): Plugin {
         var method = (init && init.method) || (input && input.method) || "GET";
         var reqBody = (init && init.body) || "";
         
-        if (url.startsWith("/") && !url.startsWith("/api/waf-proxy")) {
-          url = "/api/waf-proxy?url=" + encodeURIComponent(targetOrigin + url) + "&waf=" + isWaf;
-          if (typeof input === "string") {
-            input = url;
-          } else if (input && input.url) {
-            input = new Request(url, init || input);
+        var finalProxyUrl = url;
+        if (url.startsWith("/")) {
+          if (!url.startsWith("/api/waf-proxy")) {
+            finalProxyUrl = "/api/waf-proxy?url=" + encodeURIComponent(targetOrigin + url) + "&waf=" + isWaf;
           }
         } else if (url.startsWith(targetOrigin)) {
-          url = "/api/waf-proxy?url=" + encodeURIComponent(url) + "&waf=" + isWaf;
-          if (typeof input === "string") input = url;
-          else if (input && input.url) input = new Request(url, init || input);
+          finalProxyUrl = "/api/waf-proxy?url=" + encodeURIComponent(url) + "&waf=" + isWaf;
+        }
+
+        if (typeof input === "string") {
+          input = finalProxyUrl;
+        } else if (input && input.url) {
+          input = new Request(finalProxyUrl, init || input);
         }
 
         return origFetch.call(this, input, init).then(function(res) {
@@ -500,21 +567,25 @@ export function webguardWafProxyPlugin(): Plugin {
     var origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function(method, url, async, user, pass) {
       this._wg_method = method;
-      this._wg_url = url;
+      this._wg_orig_url = url;
+      var finalUrl = url;
       if (typeof url === "string") {
-        if (url.startsWith("/") && !url.startsWith("/api/waf-proxy")) {
-          url = "/api/waf-proxy?url=" + encodeURIComponent(targetOrigin + url) + "&waf=" + isWaf;
+        if (url.startsWith("/")) {
+          if (!url.startsWith("/api/waf-proxy")) {
+            finalUrl = "/api/waf-proxy?url=" + encodeURIComponent(targetOrigin + url) + "&waf=" + isWaf;
+          }
         } else if (url.startsWith(targetOrigin)) {
-          url = "/api/waf-proxy?url=" + encodeURIComponent(url) + "&waf=" + isWaf;
+          finalUrl = "/api/waf-proxy?url=" + encodeURIComponent(url) + "&waf=" + isWaf;
         }
       }
-      return origOpen.call(this, method, url, async !== undefined ? async : true, user, pass);
+      this._wg_url = finalUrl;
+      return origOpen.call(this, method, finalUrl, async !== undefined ? async : true, user, pass);
     };
 
     XMLHttpRequest.prototype.send = function(body) {
       var self = this;
       this.addEventListener("load", function() {
-        reportPacket(self._wg_method || "GET", self._wg_url || "", self.status || 200, body);
+        reportPacket(self._wg_method || "GET", self._wg_orig_url || self._wg_url || "", self.status || 200, body);
       });
       return origSend.call(this, body);
     };
@@ -522,7 +593,13 @@ export function webguardWafProxyPlugin(): Plugin {
     console.log("[WebGuard] Real-Time WAF proxy bridge active for: " + targetOrigin);
   })();
 </script>`;
-            html = html.replace(/<\/head>/i, `${bridgeScript}\n</head>`);
+            if (/<\/head>/i.test(html)) {
+              html = html.replace(/<\/head>/i, `${bridgeScript}\n</head>`);
+            } else if (/<\/body>/i.test(html)) {
+              html = html.replace(/<\/body>/i, `${bridgeScript}\n</body>`);
+            } else {
+              html = `${html}\n${bridgeScript}`;
+            }
 
             const modifiedBuffer = Buffer.from(html, "utf-8");
             res.setHeader("Content-Length", modifiedBuffer.length);

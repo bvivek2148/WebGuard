@@ -46,10 +46,11 @@
 4. [External Dataset Training Pipeline](#external-dataset-training-pipeline)
 5. [How to Source Security Datasets](#how-to-source-security-datasets)
 6. [Quick Start & 1-Click Launcher](#quick-start--1-click-launcher)
-7. [API Endpoints & Swagger Documentation](#api-endpoints--swagger-documentation)
-8. [End-to-End Verification & Test Commands](#end-to-end-verification--test-commands)
-9. [Project Structure](#project-structure)
-10. [Environment Configuration](#environment-configuration)
+7. [API Endpoints, Swagger & Admin Credentials](#7-api-endpoints--swagger-documentation)
+8. [Target Exploitation Ledger & Live Proxy Architecture](#8-target-exploitation-ledger--live-proxy-architecture)
+9. [End-to-End Verification & Test Commands](#9-end-to-end-verification--test-commands)
+10. [Project Structure](#10-project-structure)
+11. [Environment Configuration](#11-environment-configuration)
 
 ---
 
@@ -218,16 +219,38 @@ Interactive OpenAPI / Swagger documentation is available at **`http://127.0.0.1:
 | `POST` | `/api/copilot/chat` | Query Google Gemini 2.5 Flash for SOC threat intelligence. |
 | `POST` | `/api/copilot/explain` | Generate comprehensive incident triage reports and virtual code patches. |
 | `POST` | `/api/audit/scan` | Live vulnerability audit scan against any specified URL. |
-| `WS` | `/ws/events` | Real-time WebSocket event feed streaming live telemetry to frontend. |
+### 🔐 Default SOC Operator & Admin Credentials
 
-### Default Credentials
-- **Username**: `admin`
-- **Password**: `admin123`
-- *Stored securely in SQLite `admin_users` table using salted PBKDF2-HMAC-SHA256.*
+| Role | Email ID / Username | Password | Privileges & Capabilities |
+| :--- | :--- | :--- | :--- |
+| **SuperAdmin** | `admin@webguard.project` | `WebGuard@Major_Project_B38` | Full SOC Administration: Mode Switching, Target History Ledger, IP Blacklist Management, Custom OWASP Rules, SOC Snapshot Import/Export, and Live Attack Drills. |
+| **Analyst / Guest** | *Anonymous Access* | *(None required)* | Read-only SOC Telemetry, Request Sandbox, Vulnerability Lab exploration, and Gemini AI Copilot triage. |
+
+> [!IMPORTANT]
+> **Admin Authentication Security**: `admin@webguard.project` with password `WebGuard@Major_Project_B38` is the **exclusive** administrative credential for WebGuard SOC Console. No other credentials have SuperAdmin authorization. Standard analyst access is available via the **"Continue as Guest"** button.
+
+*Credentials are validated against the embedded SQLite database with salted PBKDF2-HMAC-SHA256 hashing.*
 
 ---
 
-## 8. End-to-End Verification & Test Commands
+## 8. Target Exploitation Ledger & Live Proxy Architecture
+
+### 🛡️ Target History & Exploit Ledger
+Accessible directly via the **Operator Profile Dropdown** in the top navigation bar:
+- **Comprehensive Audit Trail**: Automatically logs every security probe, exploit attempt, and WAF mitigation event with timestamps, HTTP status codes, and threat scores (0–100).
+- **Interactive Quick Probes**: Built-in 1-click test triggers for **SQL Injection**, **Remote Code Execution (RCE)**, **Stored XSS**, and **SSRF**.
+- **Data Portability**: One-click **JSON Export** and search filtering across target domains, paths, and payload strings.
+- **One-Click Re-testing**: Directly loads recorded target URLs back into the Exploiter Studio for verification.
+
+### 🌐 High-Performance Dynamic Reverse Proxy (`/api/waf-proxy`)
+- **Connection Pooling & Low Latency**: Persistent `keepAlive` agents (100 concurrent sockets) eliminate TLS handshake overhead across multi-asset web apps.
+- **Transparent Stream Decompression**: Automated `zlib` handling (`gzip`, `deflate`, `br`) accelerates live site rendering.
+- **Single-Page Application (SPA) Compatibility**: Automated `<base href="...">` injection and root asset rewriting seamlessly loads modern frontends (e.g. OWASP Juice Shop, Next.js, Vite, TanStack).
+- **Frame-Ancestor Unblocking**: Strips restrictive CSP and `X-Frame-Options` headers while preserving active edge WAF inspection and real-time packet telemetry.
+
+---
+
+## 9. End-to-End Verification & Test Commands
 
 Run these commands from PowerShell or terminal to verify the WAF in action:
 
@@ -274,7 +297,7 @@ npm test
 
 ---
 
-## 9. Project Structure
+## 10. Project Structure
 
 ```
 WebGuard/
@@ -312,7 +335,7 @@ WebGuard/
 
 ---
 
-## 10. Environment Configuration
+## 11. Environment Configuration
 
 Located in [`.env`](file:///c:/Vivek's%20Folder/web%20develpment/New%20folder/New%20folder/New%20folder/WebGuard/.env):
 

@@ -53,6 +53,7 @@ import {
   Globe2,
   GripVertical,
   HardDrive,
+  History,
   Home,
   Info,
   Key,
@@ -95,6 +96,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { saveTargetHistoryItem, TargetHistoryDialog } from "./TargetHistoryDialog";
 
 // ============================================================================
 // Types
@@ -604,6 +606,7 @@ export function WebLabTab({
   const [liveViewMode, setLiveViewMode] = useState<"viewport" | "exploit" | "split">("viewport");
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [targetUrlInput, setTargetUrlInput] = useState<string>(wafState.target || "");
+  const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [selectedPresetId, setSelectedPresetId] = useState<string>("sqli-login");
   const [customMethod, setCustomMethod] = useState<HttpMethod>("POST");
   const [customPath, setCustomPath] = useState<string>("/api/auth/login");
@@ -644,24 +647,41 @@ export function WebLabTab({
         const cleanPath = String(url || "").replace(/^https?:\/\/[^\/]+/, "") || "/";
         const content = `${cleanPath} ${body || ""}`;
         const isMalicious = /('|\%27)\s*([\-\-]|or|and|union|select)|<script|javascript:|onerror=|<img/i.test(content);
-        
+        const actualBlocked = status === 403 || (isMalicious && activeWaf);
+
         const newLog: LogEntry = {
           id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           ts: Date.now(),
-          type: status === 403 ? "waf" : isMalicious ? "exploit" : "request",
+          type: actualBlocked ? "waf" : isMalicious ? "exploit" : "request",
           method: (method as HttpMethod) || "GET",
           path: cleanPath,
-          status: status || (isMalicious && activeWaf ? 403 : 200),
+          status: status || (actualBlocked ? 403 : 200),
           body: body ? String(body) : undefined,
-          threatScore: status === 403 ? 96 : isMalicious ? 92 : 8,
+          threatScore: actualBlocked ? 96 : isMalicious ? 92 : 8,
           vulnId: isMalicious ? "sqli-login" : undefined,
         };
         setLogs((prev) => [newLog, ...prev.slice(0, 49)]);
+
+        // Save to target history
+        if (targetUrlInput.trim()) {
+          saveTargetHistoryItem({
+            targetUrl: targetUrlInput.trim(),
+            wafMode: activeWaf ? "blocking" : "off",
+            verdict: actualBlocked ? "BLOCKED" : isMalicious ? "EXPLOITED" : "PROXIED",
+            attackType: isMalicious ? "sqli" : undefined,
+            ruleMatched: actualBlocked ? "OWASP-CRS-INTERCEPTOR" : undefined,
+            payload: body ? String(body).slice(0, 200) : undefined,
+            path: cleanPath,
+            method: (method as string) || "GET",
+            status: status || (actualBlocked ? 403 : 200),
+            threatScore: actualBlocked ? 96 : isMalicious ? 92 : 8,
+          });
+        }
       }
     };
     window.addEventListener("message", handleWindowMessage);
     return () => window.removeEventListener("message", handleWindowMessage);
-  }, [activeWaf]);
+  }, [activeWaf, targetUrlInput]);
 
   // Resizable split divider drag handler
   useEffect(() => {
@@ -898,13 +918,71 @@ export function WebLabTab({
 
       setLiveTargetResponse(responseData);
 
+      // Save to Target & Exploit History
+      saveTargetHistoryItem({
+        targetUrl: fullTarget,
+        wafMode: activeWaf ? "blocking" : "off",
+        verdict: actualBlocked ? "BLOCKED" : "EXPLOITED",
+        attackType: mappedAttackType || "custom",
+        ruleMatched: `OWASP-CRS-942-${matchedVulnId.toUpperCase()}`,
+        payload: customPayload,
+        path: customPath,
+        method: customMethod,
+        status: responseStatus,
+        threatScore,
+      });
+
+      // Synchronize findings & incidents to Overview & SOC
+      if (!actualBlocked) {
+        dispatch({
+          type: "ADD_FINDING",
+          finding: {
+            id: uid("FND"),
+            title: `${preset.name} on ${hostHeader}`,
+            pillar: isSql ? "injection" : isXss ? "xss" : isCmdi ? "rce" : "general",
+            severity: threatScore >= 90 ? "critical" : "high",
+            source: "live",
+            status: "open",
+            discoveredAt: Date.now(),
+            lastSeen: Date.now(),
+            count: 1,
+            evidence: `Target: ${fullTarget}\nMethod: ${customMethod}\nPayload: ${customPayload}\nResponse: ${responseBody.slice(0, 180)}`,
+            patch: "Enable WebGuard WAF blocking mode and sanitize input parameters.",
+            ruleId: `OWASP-CRS-942-${matchedVulnId.toUpperCase()}`,
+            path: customPath,
+            notes: `Vulnerability verified live on ${fullTarget}. WAF protection was inactive.`,
+            owner: "SOC Analyst",
+            tags: ["live-target", matchedVulnId, "exploited"],
+          },
+        });
+      }
+
+      if (threatScore >= 85) {
+        dispatch({
+          type: "ADD_INCIDENT",
+          incident: {
+            id: uid("INC"),
+            title: `${preset.name} Against ${hostHeader}`,
+            vector: preset.category.toUpperCase(),
+            severity: threatScore >= 90 ? "critical" : "high",
+            sourceIp: simulatedIp,
+            country: origin.geo.country || "United States",
+            stage: actualBlocked ? "mitigated" : "investigating",
+            openedAt: Date.now(),
+            closedAt: actualBlocked ? Date.now() : null,
+            detail: `${actualBlocked ? "WebGuard WAF blocked attack payload" : "Origin application accepted unmitigated payload"}: ${customPayload.slice(0, 100)}`,
+            playbook: "quarantine",
+          },
+        });
+      }
+
       if (actualBlocked) {
         toast.success("🛡️ WAF Blocked Malicious Payload", {
           description: `Blocked ${preset.name} with 403 Forbidden before reaching origin.`,
         });
       } else {
         toast.error("⚠️ Origin Vulnerability Exploited!", {
-          description: `WAF is OFF — payload executed against ${fullTarget}.`,
+          description: `WAF is OFF — payload executed against ${fullTarget}. Logged to Overview & Findings.`,
         });
       }
     } finally {
@@ -991,6 +1069,22 @@ export function WebLabTab({
 
       setLogs((prev) => [...prev, reqLog, resLog]);
       setLastResult(resLog);
+
+      // Save to Target Exploitation & Interception History
+      try {
+        saveTargetHistoryItem({
+          targetUrl: "https://apex-cyberstore.io" + path,
+          wafMode: activeWaf ? "blocking" : "off",
+          verdict: isBlocked ? "BLOCKED" : effectiveVulnId ? "EXPLOITED" : "PROXIED",
+          attackType: effectiveVulnId ? VULN_DEFS[effectiveVulnId]?.label || effectiveVulnId : undefined,
+          ruleMatched: isBlocked ? `OWASP-CRS-${(effectiveVulnId || "CUSTOM").toUpperCase()}` : undefined,
+          payload: payload ? String(payload).slice(0, 300) : undefined,
+          path,
+          method,
+          status: isBlocked ? 403 : result.response.status,
+          threatScore: result.threatScore || (effectiveVulnId ? 85 : 0),
+        });
+      } catch (e) {}
 
       if (isBlocked) {
         setAttackEffect("blocked");
@@ -1474,6 +1568,15 @@ export function WebLabTab({
                     >
                       <ExternalLink className="size-3" />
                     </a>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryOpen(true)}
+                      title="View Target Exploitation & WAF Prevention History"
+                      className="flex items-center gap-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 text-[10px] font-bold border border-slate-300 dark:border-slate-700 transition cursor-pointer"
+                    >
+                      <History className="size-2.5 text-cyan-600 dark:text-cyan-400" />
+                      <span>History</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setIsMaximizedStudio(true)}
@@ -2206,54 +2309,85 @@ export function WebLabTab({
 
             {/* Active Exploit Popout Visualizer (Shows ONLY when an attack succeeds in WAF OFF mode) */}
             {activeExploitDisplay && !activeWaf && (
-              <div className="border-b-2 border-red-300 bg-red-50 p-4 transition-all animate-in fade-in">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="flex size-7 items-center justify-center rounded-lg bg-red-100 text-red-700 font-bold">
-                      ⚠️
-                    </span>
+              <div className="border-b-2 border-rose-500/80 bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-transparent p-4 sm:p-5 transition-all animate-in fade-in slide-in-from-top-2">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white font-black shadow-md shadow-rose-500/30">
+                      <ShieldAlert className="size-5" />
+                    </div>
                     <div>
-                      <h4 className="text-sm font-extrabold text-red-900">{activeExploitDisplay.title}</h4>
-                      <p className="text-xs text-red-700">{activeExploitDisplay.description}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-rose-600 text-white text-[10px] font-mono uppercase tracking-wider font-bold">
+                          CRITICAL EXPLOIT DETECTED (WAF OFF)
+                        </Badge>
+                        <Badge variant="outline" className="border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-[10px] font-mono">
+                          OWASP-CRS-942 · CWE-89
+                        </Badge>
+                      </div>
+                      <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 mt-1">
+                        {activeExploitDisplay.title}
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">
+                        {activeExploitDisplay.description}
+                      </p>
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs text-red-700 hover:text-red-900"
-                    onClick={() => setActiveExploitDisplay(null)}
-                  >
-                    Dismiss
-                  </Button>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        dispatch({ type: "SET_MODE", mode: "blocking" });
+                        toast.success("🛡️ WAF Mode switched to BLOCKING", {
+                          description: "Retrying the exploit will now drop packets at the edge with 403 Forbidden.",
+                        });
+                      }}
+                      className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm gap-1.5 cursor-pointer"
+                    >
+                      <ShieldCheck className="size-3.5" /> Enable WAF & Block Attack
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 text-xs text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
+                      onClick={() => setActiveExploitDisplay(null)}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="mt-2.5 rounded-xl border border-red-200 bg-white p-3 font-mono text-xs shadow-sm">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-red-700 mb-1">
-                    Captured Backend Exploit Evidence:
-                  </p>
-                  <pre className="overflow-x-auto text-[11px] text-slate-800 leading-relaxed font-semibold">
+                <div className="mt-3.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-white/90 dark:bg-slate-900/90 p-3.5 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                      <Terminal className="size-3.5" /> Captured Backend SQL Execution Trace
+                    </p>
+                    <span className="text-[10px] font-mono text-slate-400">Status: 200 OK (Unprotected Origin)</span>
+                  </div>
+
+                  <pre className="overflow-x-auto rounded-lg bg-slate-950 p-2.5 font-mono text-[11px] text-rose-300 leading-relaxed font-semibold border border-slate-800">
                     {activeExploitDisplay.evidence}
                   </pre>
 
                   {/* Render extracted table data if present */}
                   {Array.isArray(activeExploitDisplay.data) && (
-                    <div className="mt-2 overflow-x-auto border-t border-red-100 pt-2">
-                      <table className="w-full text-left text-[10px] text-slate-700">
+                    <div className="mt-2 overflow-x-auto border-t border-slate-200 dark:border-slate-800 pt-2">
+                      <table className="w-full text-left text-[11px] text-slate-700 dark:text-slate-300">
                         <thead>
-                          <tr className="border-b border-slate-200 text-red-800 font-bold">
-                            <th className="py-1">Username</th>
-                            <th className="py-1">Role</th>
-                            <th className="py-1">Password Hash</th>
-                            <th className="py-1">Exfiltrated Secret</th>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 text-rose-600 dark:text-rose-400 font-bold text-[10px] uppercase">
+                            <th className="py-1.5">Username</th>
+                            <th className="py-1.5">Role</th>
+                            <th className="py-1.5">Password Hash</th>
+                            <th className="py-1.5">Exfiltrated Secret</th>
                           </tr>
                         </thead>
                         <tbody>
                           {activeExploitDisplay.data.map((row, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 font-mono">
-                              <td className="py-1 font-bold text-cyan-800">{row.user}</td>
-                              <td className="py-1 text-amber-800">{row.role}</td>
-                              <td className="py-1 text-slate-500">{row.pass_hash}</td>
-                              <td className="py-1 text-red-700 font-semibold">{row.secret}</td>
+                            <tr key={idx} className="border-b border-slate-100 dark:border-slate-800/60 font-mono">
+                              <td className="py-1.5 font-bold text-cyan-700 dark:text-cyan-400">{row.user}</td>
+                              <td className="py-1.5 text-amber-700 dark:text-amber-400">{row.role}</td>
+                              <td className="py-1.5 text-slate-500">{row.pass_hash}</td>
+                              <td className="py-1.5 text-rose-600 dark:text-rose-400 font-semibold">{row.secret}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -3178,43 +3312,133 @@ export function WebLabTab({
                   ────────────────────────────────────────────────────────────── */}
                   {currentPage === "admin" && (
                     <div className="space-y-6">
-                      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <span className="text-3xl">👑</span>
-                          <div>
-                            <h2 className="text-base font-extrabold text-amber-900">
-                              Executive Admin Vault & User Directory
-                            </h2>
-                            <p className="text-xs text-amber-800">
-                              Confidential database user credentials and master encryption keys.
-                            </p>
+                      {/* Executive Header */}
+                      <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3.5">
+                            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white font-black shadow-lg shadow-amber-500/20 text-2xl">
+                              👑
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h2 className="text-base font-extrabold text-foreground">
+                                  Executive Admin Vault & User Directory
+                                </h2>
+                                <Badge className="bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-500/30 font-mono text-[10px]">
+                                  HIGH CONFIDENTIALITY
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Internal database credentials, root session tokens, and master cryptographic secrets.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="font-mono text-xs text-emerald-600 dark:text-emerald-400 border-emerald-500/40 bg-emerald-500/10">
+                              🟢 ROOT ACCESS GRANTED
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4 pt-3 border-t border-amber-500/20">
+                          <div className="rounded-lg bg-background/60 p-2.5 border border-border/50">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground">Cluster Node</span>
+                            <p className="text-xs font-mono font-bold text-foreground">apex-db-primary-01</p>
+                          </div>
+                          <div className="rounded-lg bg-background/60 p-2.5 border border-border/50">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground">Encryption</span>
+                            <p className="text-xs font-mono font-bold text-foreground">AES-256-GCM / Argon2id</p>
+                          </div>
+                          <div className="rounded-lg bg-background/60 p-2.5 border border-border/50">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground">Privilege Level</span>
+                            <p className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">0x00_ROOT_SYSTEM</p>
+                          </div>
+                          <div className="rounded-lg bg-background/60 p-2.5 border border-border/50">
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground">Audit Log</span>
+                            <p className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">STREAMING_LIVE</p>
                           </div>
                         </div>
                       </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Internal User Database (Password Hashes & Tokens)
-                        </h3>
-                        <div className="overflow-x-auto">
+                      {/* User Accounts & API Secrets Table */}
+                      <div className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                              <Users className="size-4 text-cyan-600 dark:text-cyan-400" /> Internal User Database & Token Directory
+                            </h3>
+                            <p className="text-[11px] text-muted-foreground">
+                              Exfiltrated credentials extracted directly from simulated backend user store.
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="font-mono text-[10px] self-start sm:self-auto">
+                            3 Accounts Stored
+                          </Badge>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-xl border border-border/60">
                           <table className="w-full text-left text-xs">
                             <thead>
-                              <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase font-bold">
-                                <th className="py-2">User</th>
-                                <th className="py-2">Email</th>
-                                <th className="py-2">Role</th>
-                                <th className="py-2">API Secret</th>
+                              <tr className="border-b border-border bg-muted/40 text-muted-foreground text-[10px] uppercase font-bold tracking-wider">
+                                <th className="p-3">User & Identity</th>
+                                <th className="p-3">Email Address</th>
+                                <th className="p-3">Department & Role</th>
+                                <th className="p-3">Master API Secret</th>
+                                <th className="p-3 text-right">Action</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                            <tbody className="divide-y divide-border/60 font-mono text-[11px]">
                               {FAKE_USERS.map((u, i) => (
-                                <tr key={i} className="hover:bg-slate-50">
-                                  <td className="py-2 font-bold text-slate-900">
-                                    {u.avatar} {u.username}
+                                <tr key={i} className="hover:bg-muted/30 transition-colors">
+                                  <td className="p-3">
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="text-xl">{u.avatar}</span>
+                                      <div>
+                                        <p className="font-bold text-foreground font-sans text-xs">{u.name}</p>
+                                        <p className="text-[10px] text-muted-foreground font-mono">@{u.username}</p>
+                                      </div>
+                                    </div>
                                   </td>
-                                  <td className="py-2 text-slate-500">{u.email}</td>
-                                  <td className="py-2 text-cyan-800 font-semibold">{u.role}</td>
-                                  <td className="py-2 text-amber-800 font-semibold">{u.apiKeys}</td>
+                                  <td className="p-3 text-muted-foreground font-mono">{u.email}</td>
+                                  <td className="p-3">
+                                    <div className="space-y-0.5">
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          "text-[9px] font-mono font-bold",
+                                          u.username === "admin"
+                                            ? "border-amber-500/40 text-amber-600 bg-amber-500/10"
+                                            : u.username === "jsmith"
+                                            ? "border-cyan-500/40 text-cyan-600 bg-cyan-500/10"
+                                            : "border-slate-500/40 text-slate-500"
+                                        )}
+                                      >
+                                        {u.role}
+                                      </Badge>
+                                      <p className="text-[10px] text-muted-foreground font-sans">{u.department}</p>
+                                    </div>
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="flex items-center gap-2">
+                                      <code className="rounded bg-muted px-2 py-1 text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold">
+                                        {u.apiKeys}
+                                      </code>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-right">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(u.apiKeys);
+                                        toast.success(`Copied API key for ${u.username}`);
+                                      }}
+                                      className="h-7 px-2 text-[10px] font-bold text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 cursor-pointer"
+                                    >
+                                      <Copy className="size-3 mr-1" /> Copy Key
+                                    </Button>
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -3704,6 +3928,17 @@ export function WebLabTab({
                 </button>
               </div>
 
+              {/* Target History Button */}
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer shadow-xs"
+                title="View Target Exploitation & WAF Prevention History"
+              >
+                <History className="size-3.5 text-cyan-600 dark:text-cyan-400" />
+                <span>History</span>
+              </button>
+
               {/* WAF Switch Button */}
               <button
                 type="button"
@@ -3962,6 +4197,15 @@ export function WebLabTab({
           </div>
         </div>
       )}
+      {/* Target History Modal */}
+      <TargetHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        onSelectTarget={(target) => {
+          setTargetUrlInput(target);
+          toast.info(`Target URL updated to ${target}`);
+        }}
+      />
     </div>
   );
 }
