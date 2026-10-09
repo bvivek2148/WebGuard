@@ -18,6 +18,7 @@ import {
   Play,
   Send,
   ShieldAlert,
+  ShieldCheck,
   Slack,
   Webhook,
   Workflow,

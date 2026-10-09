@@ -563,7 +563,7 @@ export function buildInitialState(): WafState {
     generation: 0,
     sessionStartedAt: now,
     mode: "off",
-    target: "http://localhost:8080",
+    target: "",
     seq: 0,
     logs: [],
     series: [],

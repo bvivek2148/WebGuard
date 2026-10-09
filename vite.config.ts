@@ -3,10 +3,11 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
+import { webguardWafProxyPlugin } from "./src/server/wafProxyPlugin";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), vlyPlugin(), tailwindcss()],
+  plugins: [react(), vlyPlugin(), tailwindcss(), webguardWafProxyPlugin()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
