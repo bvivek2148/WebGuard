@@ -181,11 +181,18 @@ export function TopBar({
               <button
                 key={mode}
                 type="button"
-                title={label}
-                onClick={() => dispatch({ type: "SET_MODE", mode })}
+                title={user?.isSuperAdmin ? label : `${label} (View Only — SuperAdmin required to toggle)`}
+                onClick={() => {
+                  if (!user?.isSuperAdmin) {
+                    toast.info("View-Only Mode: Log in as SuperAdmin to change WAF enforcement policies.");
+                    return;
+                  }
+                  dispatch({ type: "SET_MODE", mode });
+                }}
                 className={cn(
                   "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-bold tracking-wider transition-all",
                   on ? active : idle,
+                  !user?.isSuperAdmin && !on && "opacity-60 cursor-default",
                 )}
               >
                 <Icon className="size-3.5" />
@@ -354,8 +361,15 @@ export function TopBar({
                     </DropdownMenuLabel>
                     <p className="truncate text-[11px] text-muted-foreground">{user?.email ?? "operator@webguard.dev"}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="rounded border border-wg-emerald/40 bg-wg-emerald/10 px-1.5 py-px text-[9px] font-bold tracking-wider text-wg-emerald">
-                        ROLE · ADMIN
+                      <span
+                        className={cn(
+                          "rounded border px-1.5 py-px text-[9px] font-bold tracking-wider",
+                          user?.isSuperAdmin
+                            ? "border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald"
+                            : "border-wg-cyan/40 bg-wg-cyan/10 text-wg-cyan"
+                        )}
+                      >
+                        {user?.isSuperAdmin ? "ROLE · SUPERADMIN" : "ROLE · GUEST ANALYST (VIEW ONLY)"}
                       </span>
                       <span className="flex items-center gap-1 rounded border border-border/50 bg-muted/60 px-1.5 py-px text-[9px] font-semibold text-muted-foreground">
                         <Timer className="size-2.5" /> shift {sessionLabel}
@@ -365,13 +379,15 @@ export function TopBar({
                 </div>
               </div>
 
-              {/* live console stats */}
-              <div className="grid grid-cols-2 gap-px bg-border/40">
-                <ProfileStat label="Active threats" value={activeThreats} tone={activeThreats > 0 ? "text-wg-rose" : "text-wg-emerald"} icon={<Siren className="size-3" />} />
-                <ProfileStat label="Open findings" value={state.findings.filter((f) => f.status === "open" || f.status === "investigating").length} tone="text-wg-amber" icon={<ShieldOff className="size-3" />} />
-                <ProfileStat label="Active bans" value={state.blocklist.filter((b) => b.active).length} tone="text-wg-rose" icon={<ShieldCheck className="size-3" />} />
-                <ProfileStat label="Incidents" value={state.incidents.filter((i) => i.stage !== "resolved").length} tone="text-wg-cyan" icon={<Clock4 className="size-3" />} />
-              </div>
+              {/* live console stats (SuperAdmin view) */}
+              {user?.isSuperAdmin && (
+                <div className="grid grid-cols-2 gap-px bg-border/40">
+                  <ProfileStat label="Active threats" value={activeThreats} tone={activeThreats > 0 ? "text-wg-rose" : "text-wg-emerald"} icon={<Siren className="size-3" />} />
+                  <ProfileStat label="Open findings" value={state.findings.filter((f) => f.status === "open" || f.status === "investigating").length} tone="text-wg-amber" icon={<ShieldOff className="size-3" />} />
+                  <ProfileStat label="Active bans" value={state.blocklist.filter((b) => b.active).length} tone="text-wg-rose" icon={<ShieldCheck className="size-3" />} />
+                  <ProfileStat label="Incidents" value={state.incidents.filter((i) => i.stage !== "resolved").length} tone="text-wg-cyan" icon={<Clock4 className="size-3" />} />
+                </div>
+              )}
 
               {/* session activity mix */}
               <div className="border-b border-border/50 px-3 py-2.5">
@@ -443,7 +459,7 @@ export function TopBar({
               <SavePoints />
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleReset} className="gap-2 text-xs">
-                <RotateCcw className="size-3.5" /> Reset demo data
+                <RotateCcw className="size-3.5" /> Reset data
               </DropdownMenuItem>
               <input
                 ref={importRef}

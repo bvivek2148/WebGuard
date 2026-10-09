@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useWaf } from "../engine";
+import { useAuth } from "@/hooks/use-auth";
 import { generateAudit } from "../data";
 import { ATTACK_LABELS } from "../types";
 import type { AttackType, SeriesPoint } from "../types";
@@ -102,6 +103,7 @@ function OverviewDrillStatus({ onNavigate }: { onNavigate: (tab: string) => void
 
 export function OverviewTab({ onNavigate }: { onNavigate: (tab: string) => void }) {
   const { state, dispatch, currentRps, activeThreats, avgLatency } = useWaf();
+  const { user } = useAuth();
   const now = useNow(1000);
   const { findings } = state;
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -207,16 +209,22 @@ export function OverviewTab({ onNavigate }: { onNavigate: (tab: string) => void 
         <span className="mr-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
           <Zap className="size-3.5 text-wg-cyan" /> Quick actions
         </span>
-        <ActionChip icon={<ScanSearch className="size-3.5" />} label="Run vulnerability audit" onClick={() => {
-          const scan = generateAudit(state.target);
-          dispatch({ type: "START_AUDIT", findings: scan.findings, radar: scan.radar, score: scan.score });
-          onNavigate("audit");
-        }} />
+        {user?.isSuperAdmin && (
+          <ActionChip icon={<ScanSearch className="size-3.5" />} label="Run vulnerability audit" onClick={() => {
+            const scan = generateAudit(state.target);
+            dispatch({ type: "START_AUDIT", findings: scan.findings, radar: scan.radar, score: scan.score });
+            onNavigate("audit");
+          }} />
+        )}
         <ActionChip icon={<FileWarning className="size-3.5" />} label={`Findings (${state.findings.filter((f) => f.status === "open").length} open)`} onClick={() => onNavigate("findings")} />
         <ActionChip icon={<BellRing className="size-3.5" />} label={`Alerts (${state.alarms.filter((a) => a.state === "active").length})`} onClick={() => onNavigate("alerts")} />
-        <ActionChip icon={<Siren className="size-3.5" />} label={`Incidents (${state.incidents.filter((i) => i.stage === "investigating").length})`} onClick={() => onNavigate("incidents")} />
+        {user?.isSuperAdmin && (
+          <ActionChip icon={<Siren className="size-3.5" />} label={`Incidents (${state.incidents.filter((i) => i.stage === "investigating").length})`} onClick={() => onNavigate("incidents")} />
+        )}
         <ActionChip icon={<Ban className="size-3.5" />} label={`Blocklist (${state.blocklist.filter((b) => b.active).length})`} onClick={() => onNavigate("access")} />
-        <ActionChip icon={<Swords className="size-3.5" />} label="Vulnerability Lab" onClick={() => onNavigate("sandbox")} />
+        {user?.isSuperAdmin && (
+          <ActionChip icon={<Swords className="size-3.5" />} label="Vulnerability Lab" onClick={() => onNavigate("sandbox")} />
+        )}
       </div>
 
       {/* live drill status — shown only while a campaign is actually running */}

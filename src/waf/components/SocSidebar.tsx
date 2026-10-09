@@ -162,8 +162,6 @@ export function SocSidebar({
         items: [
           { id: "findings", label: "Findings & Vulnerabilities", icon: FileWarning },
           { id: "canaries", label: "Canary Tokens", icon: Bomb },
-          { id: "audit", label: "Vulnerability Audit", icon: ScanSearch },
-          { id: "sandbox", label: "Request Sandbox", icon: FlaskConical },
         ],
       },
       {
