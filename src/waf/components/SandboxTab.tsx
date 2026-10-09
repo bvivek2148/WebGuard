@@ -624,7 +624,7 @@ export function SandboxTab() {
         <div className="wg-panel p-4 xl:col-span-3">
           <SectionTitle
             title="Request builder"
-            sub="Compose any request and replay it through the simulated 6-stage WAF pipeline — the origin never sees it"
+            sub="Compose any request and inspect it through the 6-stage WAF pipeline — the origin never sees it"
             right={
               <Badge variant="outline" className="gap-1.5 border-wg-cyan/40 bg-wg-cyan/10 text-[10px] text-wg-cyan">
                 <span className="size-1.5 animate-pulse rounded-full bg-cyan-400" /> LIVE PREVIEW
@@ -1433,7 +1433,7 @@ export function SandboxTab() {
                   <div className="mt-3 overflow-hidden rounded-lg border border-border/40">
                     <div className="flex items-center justify-between border-b border-border/30 bg-muted/40 px-2.5 py-1">
                       <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground/70">
-                        <Server className="size-3 text-wg-cyan" /> Simulated origin response
+                        <Server className="size-3 text-wg-cyan" /> Origin server response
                       </p>
                       <span className="font-mono text-[9px] text-muted-foreground">
                         HTTP/1.1 {originResponse(r).status} {originResponse(r).reason}

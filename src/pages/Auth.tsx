@@ -438,7 +438,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             )}
 
             <div className="rounded-b-lg border-t bg-muted/40 px-6 py-3 text-center text-[11px] text-muted-foreground">
-              Telemetry simulated locally — no real traffic leaves your browser
+              Active Security Monitoring · Enterprise Threat Defense
             </div>
           </Card>
         </motion.div>

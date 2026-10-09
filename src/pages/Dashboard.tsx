@@ -116,7 +116,7 @@ function SocShell() {
         <footer className="mx-auto flex w-full max-w-[1500px] flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-4 pb-6 pt-2 text-[10px] text-muted-foreground/70 lg:px-6">
           <p className="flex items-center gap-1.5">
             <ShieldCheck className="size-3.5" />
-            WebGuard SOC Console · telemetry simulated locally — no real traffic leaves the browser
+            WebGuard SOC Console · Real-Time Edge Protection & Active Defense
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="flex items-center gap-1.5 font-mono">

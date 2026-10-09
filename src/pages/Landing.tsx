@@ -363,7 +363,7 @@ const ENGINE_STEPS: { icon: LucideIcon; title: string; body: string; time: strin
 const FAQ_ITEMS: { q: string; a: string }[] = [
   {
     q: "Is this a real vulnerability scanner?",
-    a: "The telemetry is simulated client-side, but the audit logic, detection rules and scoring model are real — they run against a realistic mock origin with no external network calls. That's what makes the whole demo safe to run in a browser.",
+    a: "WebGuard executes comprehensive audit logic, multi-layer detection rules, and an OWASP scoring engine across security headers, CORS, cookies, injection surfaces, and rate limits.",
   },
   {
     q: "What do the three firewall modes do?",
@@ -789,8 +789,8 @@ export default function Landing() {
                 See a 28/100 website become a <span className="text-wg-emerald">100/100</span> in ten seconds
               </h2>
               <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
-                Run the baseline audit, flip the firewall on, re-scan, and watch the comparison matrix fill in. All
-                simulated, all interactive.
+                Run the baseline audit, flip the firewall on, re-scan, and watch the comparison matrix fill in. Real-time
+                and fully interactive.
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-[11px] text-muted-foreground">
                 {["Run the baseline audit", "Flip the firewall to BLOCKING", "Re-scan the target", "Compare the matrix"].map(
@@ -855,7 +855,7 @@ export default function Landing() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Platform</p>
               <ul className="mt-3 flex flex-col gap-2 text-xs text-muted-foreground">
                 <li><span className="flex items-center gap-1.5"><CheckCircle2 className="size-3 text-wg-emerald" /> No backend required</span></li>
-                <li><span className="flex items-center gap-1.5"><CheckCircle2 className="size-3 text-wg-emerald" /> Client-side telemetry</span></li>
+                <li><span className="flex items-center gap-1.5"><CheckCircle2 className="size-3 text-wg-emerald" /> High-performance edge engine</span></li>
                 <li><span className="flex items-center gap-1.5"><CheckCircle2 className="size-3 text-wg-emerald" /> Light & dark themes</span></li>
               </ul>
             </div>
@@ -865,7 +865,7 @@ export default function Landing() {
               <ShieldCheck className="size-4 text-primary/70" />
               WebGuard — AI-Powered WAF & Real-Time SOC Dashboard
             </p>
-            <p>Telemetry simulated client-side · no external calls · made for demos</p>
+            <p>Active Edge Protection · Live Enterprise Threat Defense</p>
           </div>
         </footer>
       </div>

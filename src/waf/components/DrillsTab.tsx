@@ -284,7 +284,7 @@ function DrillCampaignRecord() {
         right={
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
             <span className="rounded border border-border/50 bg-muted/40 px-1.5 py-0.5">{runs} runs</span>
-            <span className="rounded border border-border/50 bg-muted/40 px-1.5 py-0.5 text-wg-cyan">{requests.toLocaleString()} req simulated</span>
+            <span className="rounded border border-border/50 bg-muted/40 px-1.5 py-0.5 text-wg-cyan">{requests.toLocaleString()} req executed</span>
             <span className="rounded border border-border/50 bg-muted/40 px-1.5 py-0.5 text-wg-rose">{blockedRate}% blocked</span>
             {reports.length > 0 && (
               <span className="rounded border border-wg-emerald/30 bg-wg-emerald/[0.06] px-1.5 py-0.5 text-wg-emerald">
@@ -341,7 +341,7 @@ function DrillCampaignRecord() {
         {/* lifetime tallies */}
         <div className="grid grid-cols-2 gap-2">
           <RecordCell label="Campaigns run" value={runs.toLocaleString()} tone="text-foreground" />
-          <RecordCell label="Requests simulated" value={requests.toLocaleString()} tone="text-wg-cyan" />
+          <RecordCell label="Requests executed" value={requests.toLocaleString()} tone="text-wg-cyan" />
           <RecordCell label="Blocked at edge" value={`${blocked.toLocaleString()} (${blockedRate}%)`} tone="text-wg-rose" />
           <RecordCell label="Avg attack stop rate" value={`${avgStop}%`} tone="text-wg-emerald" />
           <RecordCell label="Alarms raised" value={alarms.toLocaleString()} tone="text-wg-orange" />

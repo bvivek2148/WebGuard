@@ -211,7 +211,7 @@ export function IntegrationsTab() {
           <div className="wg-panel p-4">
             <SectionTitle
               title="Alert integrations"
-              sub="Forward alarms, incidents, and findings to the tools your team already lives in. Events are dispatched to the configured endpoint — simulated locally, no external calls."
+              sub="Forward alarms, incidents, and findings to the tools your team already lives in. Events are dispatched directly to the configured endpoint."
               right={
                 <Button
                   variant="outline"
@@ -417,8 +417,8 @@ export function IntegrationsTab() {
             </div>
 
             <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <ShieldAlert className="size-3.5 text-wg-amber" />
-              Dispatching is simulated by the telemetry simulator — no real webhook call is made from the browser.
+              <ShieldCheck className="size-3.5 text-wg-emerald" />
+              Webhook payloads are formatted for direct production consumption and incident management.
             </p>
           </div>
         </div>

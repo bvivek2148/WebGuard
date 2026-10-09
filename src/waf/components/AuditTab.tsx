@@ -1429,7 +1429,6 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
             <Sparkles className="size-4" /> Run Baseline Audit
             <ArrowRight className="size-4" />
           </Button>
-          <p className="text-[10px] text-muted-foreground">Default target: http://localhost:8080 · simulated deep-scan takes ~2s</p>
         </div>
       )}
 

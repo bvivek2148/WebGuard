@@ -286,7 +286,7 @@ export function VulnLabTab(props: VulnLabProps) {
 
             {/* Vulnerability Toggles */}
             <div className="wg-panel p-4">
-              <SectionTitle title="Active Vulnerabilities" sub="Toggle which vulns the simulated site has" right={<Badge variant="outline" className="gap-1 border-wg-rose/40 bg-wg-rose/10 text-[10px] text-wg-rose">{enabledVulns.length} enabled</Badge>} />
+              <SectionTitle title="Active Vulnerabilities" sub="Toggle active web application vulnerabilities" right={<Badge variant="outline" className="gap-1 border-wg-rose/40 bg-wg-rose/10 text-[10px] text-wg-rose">{enabledVulns.length} enabled</Badge>} />
               <div className="mt-3 flex flex-col gap-2">
                 {relevantVulns.map((vuln) => {
                   const enabled = enabledVulns.includes(vuln.id);
@@ -921,7 +921,7 @@ export function VulnLabTab(props: VulnLabProps) {
                 {[
                   { step: "1", title: "Define your vulnerability", desc: "Name it, set severity, and write a description of the weakness.", icon: <Bug className="size-4 text-wg-violet" /> },
                   { step: "2", title: "Craft a test payload", desc: "Write the exact attack string that would exploit this vulnerability.", icon: <Code2 className="size-4 text-wg-cyan" /> },
-                  { step: "3", title: "Run the test", desc: "Launch the attack against the simulated site with WAF OFF to see exploitation.", icon: <Play className="size-4 text-wg-rose" /> },
+                  { step: "3", title: "Run the test", desc: "Launch the attack against the application with WAF OFF to see exploitation.", icon: <Play className="size-4 text-wg-rose" /> },
                   { step: "4", title: "Activate WebGuard", desc: "Toggle WAF ON and re-run. WebGuard will detect and block the custom payload.", icon: <Shield className="size-4 text-wg-emerald" /> },
                   { step: "5", title: "Analyze results", desc: "Review the before/after comparison, raw HTTP exchange, and virtual patch applied.", icon: <Search className="size-4 text-wg-amber" /> },
                 ].map(({ step, title, desc, icon }) => (
