@@ -23,6 +23,7 @@ import { SEVERITY_META } from "../types";
 import { PostureGauge } from "./PostureGauge";
 import { RunStat, SeverityPieTip } from "./AuditBits";
 import {
+  ArrowLeft,
   ArrowRight,
   Bug,
   ChevronRight,
@@ -158,6 +159,7 @@ export function AuditTab({ onNavigate }: { onNavigate?: (tab: string) => void })
   const [findingQuery, setFindingQuery] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [showInitialView, setShowInitialView] = useState(false);
 
   const togglePillar = (id: string) => {
     setOpenPillars((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -270,6 +272,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
 
   const running = audit.status === "running";
   const done = audit.status === "done";
+  const isViewingResults = done && !showInitialView;
   const shielded = state.mode === "blocking";
 
   const stepIdx = running ? Math.min(SCAN_STEPS.length - 1, Math.floor((audit.progress / 100) * SCAN_STEPS.length)) : -1;
@@ -340,6 +343,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
   const topFinding = openFindings.find((f) => f.severity === "critical" || f.severity === "high") ?? openFindings[0] ?? null;
 
   const startAudit = async () => {
+    setShowInitialView(false);
     try {
       toast.info(`Scanning target: ${state.target}...`);
       const res = await fetch("http://localhost:8000/api/audit/scan", {
@@ -442,13 +446,21 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {done && shielded && (
+          {isViewingResults && shielded && (
             <Badge className="border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald">
               <CheckCircle2 className="size-3" /> VERIFIED — WAF ACTIVE
             </Badge>
           )}
-          {done && (
+          {isViewingResults && (
             <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowInitialView(true)}
+                className="gap-1.5"
+              >
+                <ArrowLeft className="size-4" /> Back
+              </Button>
               <ExportMenu
                 data={{
                   label: "audit report",
@@ -464,17 +476,17 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
           <Button
             onClick={startAudit}
             disabled={running}
-            variant={done && !shielded ? "default" : "outline"}
+            variant={isViewingResults && !shielded ? "default" : "outline"}
             className={cn(
               "gap-2",
-              done && !shielded && "border-wg-cyan/40 bg-wg-cyan/10 text-wg-cyan hover:bg-wg-cyan/20",
+              isViewingResults && !shielded && "border-wg-cyan/40 bg-wg-cyan/10 text-wg-cyan hover:bg-wg-cyan/20",
             )}
           >
             {running ? (
               <>
                 <RefreshCw className="size-4 animate-spin" /> Scanning…
               </>
-            ) : done ? (
+            ) : isViewingResults ? (
               <>
                 <RefreshCw className="size-4" /> Re-Scan Website
               </>
@@ -484,88 +496,31 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
               </>
             )}
           </Button>
+          {isViewingResults && (
+            <Button
+              onClick={() => dispatch({ type: "SET_MODE", mode: shielded ? "off" : "blocking" })}
+              variant="outline"
+              className={cn(
+                "gap-1.5 font-medium text-xs",
+                shielded
+                  ? "border-wg-emerald/50 bg-wg-emerald/10 text-wg-emerald hover:bg-wg-emerald/20"
+                  : "border-wg-rose/50 bg-wg-rose/10 text-wg-rose hover:bg-wg-rose/20"
+              )}
+            >
+              {shielded ? <ShieldCheck className="size-4 text-wg-emerald" /> : <ShieldOff className="size-4 text-wg-rose" />}
+              {shielded ? "Turn WAF OFF" : "Turn WAF ON"}
+            </Button>
+          )}
         </div>
       </div>
 
       {/* scan run stats */}
-      {done && (
+      {isViewingResults && (
         <div className="wg-panel grid grid-cols-2 gap-3 p-4 sm:grid-cols-4">
           <RunStat icon={<Send className="size-4" />} label="Probes sent" value={scanStats.probes.toLocaleString()} accent="text-wg-cyan" sub="HTTP request vectors fired" />
           <RunStat icon={<Route className="size-4" />} label="Endpoints probed" value={String(scanStats.endpoints)} accent="text-wg-violet" sub="across the 6 audit pillars" />
           <RunStat icon={<Timer className="size-4" />} label="Scan duration" value={`${(scanStats.durationMs / 1000).toFixed(1)}s`} accent="text-wg-amber" sub="full pass completed" />
           <RunStat icon={<Sparkles className="size-4" />} label="Detection confidence" value={`${scanStats.confidence.toFixed(1)}%`} accent="text-wg-emerald" sub="signature + ML agreement" />
-        </div>
-      )}
-
-      {/* scan history */}
-      {state.auditHistory.length > 0 && (
-        <div className="wg-panel p-4">
-          <SectionTitle
-            title={
-              <span className="flex items-center gap-2">
-                <History className="size-4 text-wg-cyan" /> Scan history
-              </span>
-            }
-            sub="Every completed audit, newest first — posture score, grade, and protection state"
-          />
-          <div className="flex flex-col gap-1.5">
-            {state.auditHistory.slice(0, 6).map((h: any) => (
-              <button
-                type="button"
-                key={h.id}
-                onClick={() => { setSelectedHistoryId(h.id); setHistoryOpen(true); }}
-                className="group flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-left transition-colors hover:border-wg-cyan/30 hover:bg-muted/50"
-              >
-                <span
-                  className={cn(
-                    "font-mono text-sm font-bold",
-                    h.shielded ? "text-wg-emerald" : "text-wg-rose",
-                  )}
-                >
-                  {h.score}
-                  <span className="ml-1 text-[10px]">/100</span>
-                </span>
-                <span
-                  className={cn(
-                    "rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-bold",
-                    h.shielded
-                      ? "border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald"
-                      : "border-wg-rose/40 bg-wg-rose/10 text-wg-rose",
-                  )}
-                >
-                  GRADE {h.grade}
-                </span>
-                <span className="text-[11px] text-muted-foreground">{h.findings} findings</span>
-                <span
-                  className={cn(
-                    "rounded-md border px-1.5 py-0.5 text-[9px] font-bold tracking-wider",
-                    h.shielded
-                      ? "border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald"
-                      : "border-wg-rose/40 bg-wg-rose/10 text-wg-rose",
-                  )}
-                >
-                  {h.shielded ? "WAF ACTIVE" : "WAF OFF"}
-                </span>
-                <span className="hidden text-[10px] text-muted-foreground sm:inline" title={h.target ?? state.target}>
-                  <Target className="mr-1 inline size-3" />{((h as any).target ?? state.target).replace(/^https?:\/\//, "").slice(0, 35)}
-                </span>
-                <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
-                  {timeAgo(h.ts)}
-                  <ChevronRight className="size-3 text-muted-foreground/50 transition-colors group-hover:text-wg-cyan" />
-                </span>
-              </button>
-            ))}
-          </div>
-          {state.auditHistory.length > 0 && (
-            <button
-              type="button"
-              onClick={() => { setSelectedHistoryId(null); setHistoryOpen(true); }}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border/50 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-wg-cyan/40 hover:text-wg-cyan"
-            >
-              <History className="size-3.5" />
-              View all {state.auditHistory.length} scans
-            </button>
-          )}
         </div>
       )}
 
@@ -597,48 +552,8 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
         </div>
       )}
 
-      {/* shield prompt / status banner */}
-      {done && (
-        <div
-          className={cn(
-            "flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between",
-            shielded
-              ? "border-wg-emerald/40 bg-wg-emerald/[0.08]"
-              : "border-wg-rose/40 bg-wg-rose/[0.08]",
-          )}
-        >
-          <div className="flex items-center gap-3">
-            {shielded ? (
-              <ShieldCheck className="size-8 shrink-0 text-wg-emerald" />
-            ) : (
-              <ShieldAlert className="size-8 shrink-0 text-wg-rose" />
-            )}
-            <div>
-              <p className={cn("text-sm font-semibold", shielded ? "text-wg-emerald" : "text-wg-rose")}>
-                {shielded
-                  ? "FIREWALL ACTIVE — virtual patches enforced"
-                  : "FIREWALL OFF — origin exposed to raw traffic"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {shielded
-                  ? `All ${audit.findings.length} virtual patches are live at the edge. Re-scan to re-verify a perfect posture.`
-                  : "Activate WebGuard protection to inject security headers, cloak the server, and shield injection points, then re-scan to verify."}
-              </p>
-            </div>
-          </div>
-          {!shielded && (
-            <Button
-              className="gap-2 border-wg-emerald/50 bg-wg-emerald/15 text-wg-emerald hover:bg-wg-emerald/25"
-              onClick={() => dispatch({ type: "SET_MODE", mode: "blocking" })}
-            >
-              <Lock className="size-4" /> ACTIVATE FIREWALL
-            </Button>
-          )}
-        </div>
-      )}
-
       {/* register delta — what this scan newly discovered vs. already tracked */}
-      {done && audit.lastDelta && (
+      {isViewingResults && audit.lastDelta && (
         <div
           className={cn(
             "flex flex-col gap-3 rounded-2xl border p-4 lg:flex-row lg:items-center lg:justify-between",
@@ -696,7 +611,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* executive summary */}
-      {done && (
+      {isViewingResults && (
         <div className="wg-panel p-4">
           <div className="mb-3 flex items-center justify-between">
             <p className="wg-kicker">Executive summary</p>
@@ -814,7 +729,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* severity profile donut */}
-      {done && (
+      {isViewingResults && (
         <div className="wg-panel p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -931,7 +846,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* posture trend + exposure risk */}
-      {done && (
+      {isViewingResults && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div className="wg-panel p-4 xl:col-span-2">
             <SectionTitle
@@ -1021,7 +936,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
         </div>
       )}
 
-      {done && (
+      {isViewingResults && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* gauge */}
           <div className="wg-panel flex flex-col items-center p-6">
@@ -1147,7 +1062,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* pillar exposure */}
-      {done && (
+      {isViewingResults && (
         <div className="wg-panel p-4">
           <SectionTitle
             title="Pillar exposure"
@@ -1219,7 +1134,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* remediation estimate + pillar quick-nav */}
-      {done && (
+      {isViewingResults && (
         <div className="wg-panel p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -1263,7 +1178,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* compliance impact */}
-      {done && (
+      {isViewingResults && (
         <div className="wg-panel p-4">
           <SectionTitle
             title="Compliance impact"
@@ -1305,7 +1220,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* raw scan transcript */}
-      {done && (
+      {isViewingResults && (
         <div className="wg-panel p-4">
           <SectionTitle
             title={
@@ -1382,7 +1297,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* findings */}
-      {done && (
+      {isViewingResults && (
         <div className="wg-panel p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
@@ -1496,7 +1411,7 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
       )}
 
       {/* pre-audit hint */}
-      {!done && !running && (
+      {!isViewingResults && !running && (
         <div className="wg-panel flex flex-col items-center gap-3 p-10 text-center">
           <div className="flex size-14 items-center justify-center rounded-2xl border border-wg-cyan/20 bg-wg-cyan/10 text-wg-cyan">
             <ShieldAlert className="size-7" />
@@ -1515,6 +1430,78 @@ th{background:#111a2e;color:#94a3b8;text-transform:uppercase;font-size:.7rem}
             <ArrowRight className="size-4" />
           </Button>
           <p className="text-[10px] text-muted-foreground">Default target: http://localhost:8080 · simulated deep-scan takes ~2s</p>
+        </div>
+      )}
+
+      {/* scan history — shown in initial / before-audit state */}
+      {!isViewingResults && !running && state.auditHistory.length > 0 && (
+        <div className="wg-panel p-4">
+          <SectionTitle
+            title={
+              <span className="flex items-center gap-2">
+                <History className="size-4 text-wg-cyan" /> Scan history
+              </span>
+            }
+            sub="Every completed audit, newest first — posture score, grade, and protection state"
+          />
+          <div className="flex flex-col gap-1.5">
+            {state.auditHistory.slice(0, 6).map((h: any) => (
+              <button
+                type="button"
+                key={h.id}
+                onClick={() => { setSelectedHistoryId(h.id); setHistoryOpen(true); }}
+                className="group flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-left transition-colors hover:border-wg-cyan/30 hover:bg-muted/50"
+              >
+                <span
+                  className={cn(
+                    "font-mono text-sm font-bold",
+                    h.shielded ? "text-wg-emerald" : "text-wg-rose",
+                  )}
+                >
+                  {h.score}
+                  <span className="ml-1 text-[10px]">/100</span>
+                </span>
+                <span
+                  className={cn(
+                    "rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-bold",
+                    h.shielded
+                      ? "border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald"
+                      : "border-wg-rose/40 bg-wg-rose/10 text-wg-rose",
+                  )}
+                >
+                  GRADE {h.grade}
+                </span>
+                <span className="text-[11px] text-muted-foreground">{h.findings} findings</span>
+                <span
+                  className={cn(
+                    "rounded-md border px-1.5 py-0.5 text-[9px] font-bold tracking-wider",
+                    h.shielded
+                      ? "border-wg-emerald/40 bg-wg-emerald/10 text-wg-emerald"
+                      : "border-wg-rose/40 bg-wg-rose/10 text-wg-rose",
+                  )}
+                >
+                  {h.shielded ? "WAF ACTIVE" : "WAF OFF"}
+                </span>
+                <span className="hidden text-[10px] text-muted-foreground sm:inline" title={h.target ?? state.target}>
+                  <Target className="mr-1 inline size-3" />{((h as any).target ?? state.target).replace(/^https?:\/\//, "").slice(0, 35)}
+                </span>
+                <span className="ml-auto flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+                  {timeAgo(h.ts)}
+                  <ChevronRight className="size-3 text-muted-foreground/50 transition-colors group-hover:text-wg-cyan" />
+                </span>
+              </button>
+            ))}
+          </div>
+          {state.auditHistory.length > 0 && (
+            <button
+              type="button"
+              onClick={() => { setSelectedHistoryId(null); setHistoryOpen(true); }}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border/50 py-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-wg-cyan/40 hover:text-wg-cyan"
+            >
+              <History className="size-3.5" />
+              View all {state.auditHistory.length} scans
+            </button>
+          )}
         </div>
       )}
 
